@@ -95,8 +95,9 @@ export default function VoiceAssistant() {
   const isAvailable = voiceStatus?.available;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-10 animate-fadeIn">
       {/* Header */}
+
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
           <span>🎙️</span>

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { negotiate, counterNegotiate, createOrder } from '../api/client';
+import { negotiate, counterNegotiate, createOrder, fetchMerchants, fetchManifest } from '../api/client';
+
 import { Spinner, TrustBadge } from '../components';
 import { useUIStore } from '../stores/uiStore';
-import axios from 'axios';
+
 
 interface UpsellItem {
   id: string;
@@ -132,10 +133,10 @@ export default function NegotiationCheckout() {
   const { data: productData, isLoading } = useQuery({
     queryKey: ['product-for-negotiate', pid],
     queryFn: async () => {
-      const merchants = await axios.get('/api/merchants').then(r => r.data);
+      const merchants = await fetchMerchants();
       for (const m of merchants) {
         try {
-          const manifest = await axios.get(`/api/manifest/${m.id}`).then(r => r.data);
+          const manifest = await fetchManifest(m.id);
           const product = manifest.products?.find((p: any) => p.id === pid);
           if (product) return { product, merchant: m };
         } catch { continue; }
@@ -143,6 +144,7 @@ export default function NegotiationCheckout() {
       return null;
     },
   });
+
 
   const product = productData?.product;
   const merchant = productData?.merchant;
@@ -379,27 +381,31 @@ export default function NegotiationCheckout() {
   };
 
   const handlePay = () => {
-    if (!negotiation?.final_price || !product) return;
+    const finalPrice = negotiation?.final_price || Number(product?.price || 0);
+    if (!product || finalPrice <= 0) return;
     orderMut.mutate({
       product_id: pid,
-      amount: payableAmount,
-      negotiation_id: negotiation.id,
+      amount: payableAmount || finalPrice,
+      negotiation_id: negotiation?.id || undefined,
       buyer_intent: upsellAdded && upsellItem
-        ? `${buyerMessage || 'Negotiated purchase'} + Cross-Sell Bundle: ${upsellItem.name} (₹${upsellItem.bundlePrice})`
-        : buyerMessage,
+        ? `${buyerMessage || 'Direct purchase'} + Cross-Sell Bundle: ${upsellItem.name} (₹${upsellItem.bundlePrice})`
+        : (buyerMessage || 'Direct purchase at list price'),
     });
   };
+
 
   if (isLoading) return <Spinner />;
   if (!product) return <div className="text-center py-16 text-text-secondary">Product not found</div>;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-fadeIn">
       <h1 className="text-xl sm:text-2xl font-bold text-text mb-6 sm:mb-8">Negotiate & Checkout</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
         {/* Left: Product + Negotiation */}
-        <div className="lg:col-span-3 space-y-4 sm:space-y-6">
+        <div className="lg:col-span-7 space-y-4 sm:space-y-6">
+
           {/* Product Card */}
           <div className="bg-white rounded-2xl border border-border shadow-sm p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -463,19 +469,40 @@ export default function NegotiationCheckout() {
                     className="w-full px-4 py-2.5 sm:py-3 rounded-xl border border-border bg-white text-text text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
-                <button
-                  onClick={handleNegotiate}
-                  disabled={negotiateMut.isPending || isStreaming}
-                  className="w-full py-2.5 sm:py-3 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 cursor-pointer shadow-xs flex items-center justify-center gap-2"
-                >
-                  {(negotiateMut.isPending || isStreaming) && (
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  {negotiateMut.isPending || isStreaming ? 'Negotiating...' : 'Submit Offer'}
-                </button>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+
+                  <button
+                    onClick={handleNegotiate}
+                    disabled={negotiateMut.isPending || isStreaming || !proposedPrice}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs sm:text-sm font-bold hover:shadow-md transition-all disabled:opacity-50 cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  >
+                    {(negotiateMut.isPending || isStreaming) && (
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    )}
+                    <span>{negotiateMut.isPending || isStreaming ? 'Negotiating...' : '🤖 Propose AI Discount'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      orderMut.mutate({
+                        product_id: pid,
+                        amount: payableAmount || Number(product.price),
+                        buyer_intent: upsellAdded && upsellItem
+                          ? `Instant Purchase at ₹${product.price} + Bundle: ${upsellItem.name} (₹${upsellItem.bundlePrice})`
+                          : `Instant Purchase at List Price (₹${product.price})`,
+                      });
+                    }}
+                    disabled={orderMut.isPending}
+                    className="btn-3d-primary flex-1 py-3 text-white rounded-xl text-xs sm:text-sm font-extrabold shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {orderMut.isPending ? 'Processing...' : `⚡ Buy Now (₹${payableAmount.toLocaleString('en-IN')})`}
+                  </button>
+                </div>
               </div>
             </div>
           )}
+
 
           {/* Negotiation Transcript */}
           {negotiation && (
@@ -553,7 +580,8 @@ export default function NegotiationCheckout() {
         </div>
 
         {/* Right: Policy Check + Payment */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-5 space-y-6">
+
           {/* Policy Check Result */}
           {policyResult && (
             <div className={`rounded-2xl border-2 shadow-sm p-6 ${

@@ -11,6 +11,10 @@ logger = logging.getLogger("agentready.auth_routes")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+class RegisterRequest(BaseModel):
+    preferred_role: Optional[str] = None  # "buyer" | "merchant" | "admin"
+    merchant_id: Optional[int] = None
+
 
 class RegisterResponse(BaseModel):
     uid: str
@@ -35,21 +39,62 @@ class MerchantApplicationResponse(BaseModel):
     created_at: str
 
 
-@router.post("/register", response_model=RegisterResponse)
-async def register_or_get_profile(user: AuthUser = Depends(get_current_user)):
-    """Called after Google sign-in to ensure user profile exists in RTDB.
+class SwitchRoleRequest(BaseModel):
+    role: str  # "buyer" | "merchant"
+    merchant_id: Optional[int] = 1
 
-    The get_current_user dependency already auto-creates the profile on first
-    sign-in, so this endpoint just returns the resolved user.
-    """
+
+@router.post("/register", response_model=RegisterResponse)
+async def register_or_get_profile(
+    body: Optional[RegisterRequest] = None,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Called after Google sign-in. If preferred_role is provided, updates role in RTDB."""
+    target_role = (
+        body.preferred_role
+        if (body and body.preferred_role in ["buyer", "merchant", "admin"])
+        else user.role
+    )
+    target_merchant_id = (
+        body.merchant_id
+        if (body and body.merchant_id is not None)
+        else (1 if target_role == "merchant" else None)
+    )
+
+    from backend.services.auth_service import update_user_profile
+    update_user_profile(user.uid, target_role, target_merchant_id)
+
     return RegisterResponse(
         uid=user.uid,
         email=user.email,
-        role=user.role,
-        merchant_id=user.merchant_id,
+        role=target_role,
+        merchant_id=target_merchant_id,
         display_name=user.display_name,
         is_new=False,
     )
+
+
+@router.post("/switch-role", response_model=RegisterResponse)
+async def switch_user_role(
+    body: SwitchRoleRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Instant 1-click role elevation / switch between Buyer and Merchant."""
+    target_role = body.role if body.role in ["buyer", "merchant"] else "merchant"
+    target_merchant_id = body.merchant_id or (1 if target_role == "merchant" else None)
+
+    from backend.services.auth_service import update_user_profile
+    update_user_profile(user.uid, target_role, target_merchant_id)
+
+    return RegisterResponse(
+        uid=user.uid,
+        email=user.email,
+        role=target_role,
+        merchant_id=target_merchant_id,
+        display_name=user.display_name,
+        is_new=False,
+    )
+
 
 
 @router.get("/me", response_model=RegisterResponse)
@@ -142,4 +187,3 @@ async def get_application_status(user: Optional[AuthUser] = Depends(get_optional
     except Exception:
         pass
     return {"status": "none"}
-

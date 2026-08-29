@@ -1,72 +1,63 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+
 import { useUIStore } from './stores/uiStore';
 import { useAuthStore } from './stores/authStore';
 import { RequireAuth, RequireRole } from './components/ProtectedRoute';
-import rayLogo from './assets/ray-logo.png';
-
-// Pages
 import Landing from './pages/Landing';
-import Login from './pages/Login';
-import MerchantApply from './pages/MerchantApply';
-import AdminApprovals from './pages/AdminApprovals';
-import MerchantApprovals from './pages/MerchantApprovals';
-import MyOrders from './pages/MyOrders';
-import MerchantOnboarding from './pages/MerchantOnboarding';
 import ManifestReview from './pages/ManifestReview';
 import MerchantDashboard from './pages/MerchantDashboard';
-import PolicySettings from './pages/PolicySettings';
 import BuyerSearch from './pages/BuyerSearch';
 import NegotiationCheckout from './pages/NegotiationCheckout';
-import Receipt from './pages/Receipt';
-import AuditLog from './pages/AuditLog';
-import VoiceAssistant from './pages/VoiceAssistant';
-import GrowthDashboard from './pages/GrowthDashboard';
+import PolicySettings from './pages/PolicySettings';
 import AgentReadyCertificate from './pages/AgentReadyCertificate';
+import AuditLog from './pages/AuditLog';
+import GrowthDashboard from './pages/GrowthDashboard';
 
+import VoiceAssistant from './pages/VoiceAssistant';
+import Receipt from './pages/Receipt';
+import Login from './pages/Login';
+import MerchantApply from './pages/MerchantApply';
+import MerchantApprovals from './pages/MerchantApprovals';
+import MerchantOnboarding from './pages/MerchantOnboarding';
+import MyOrders from './pages/MyOrders';
+import rayLogo from './assets/ray-logo.png';
+
+/* ─── 3D FLOATING GLASS NAVBAR (Unified for Buyer & Merchant) ─── */
 function FloatingNavbar() {
+  const { user, signOutUser } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [avatarError, setAvatarError] = useState(false);
-  const { user, signOutUser, loading } = useAuthStore();
-  const isActive = (path: string) => location.pathname === path;
 
-
-  // Close mobile menu on navigate
+  // Close menus on route change
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     setMobileMenuOpen(false);
     setUserDropdownOpen(false);
   }, [location.pathname]);
 
-  // Compute navigation links based on user role
+  // Compute navigation links based on user role (Buyer vs Merchant)
   let navLinks: { path: string; label: string }[] = [];
 
   if (!user) {
     navLinks = [];
-  } else if (user.role === 'admin') {
+  } else if (user.role === 'merchant') {
+    const mId = user.merchantId || 1;
     navLinks = [
-      { path: '/', label: 'All Merchants' },
-      { path: '/admin/approvals', label: '🛡️ Approvals' },
-      { path: '/admin/audit', label: 'Audit Trail' },
-      { path: '/shop', label: 'AI Shop' },
-    ];
-  } else if (user.role === 'merchant' && user.merchantId) {
-    navLinks = [
-      { path: `/merchant/${user.merchantId}/dashboard`, label: 'Dashboard' },
-      { path: `/merchant/${user.merchantId}/manifest`, label: 'Manifest' },
-      { path: `/merchant/${user.merchantId}/policy`, label: 'Policy' },
-      { path: `/merchant/${user.merchantId}/growth`, label: 'Growth' },
-      { path: `/merchant/${user.merchantId}/approvals`, label: 'Approvals' },
-      { path: `/merchant/${user.merchantId}/certificate`, label: 'Badge' },
+      { path: `/merchant/${mId}/dashboard`, label: 'Dashboard' },
+      { path: `/merchant/${mId}/manifest`, label: 'Manifest' },
+      { path: `/merchant/${mId}/policy`, label: 'Policy' },
+      { path: `/merchant/${mId}/growth`, label: 'Growth' },
+      { path: `/merchant/${mId}/approvals`, label: 'Approvals' },
+      { path: `/merchant/${mId}/audit`, label: 'Audit Trail' },
+      { path: `/merchant/${mId}/certificate`, label: 'Badge' },
       { path: '/shop', label: 'AI Shop' },
     ];
   } else {
     // Default: Authenticated Buyer
     navLinks = [
-      { path: '/', label: 'Marketplace' },
       { path: '/shop', label: 'AI Shop' },
       { path: '/shop/orders', label: 'My Orders' },
       { path: '/voice', label: '🎙️ Voice AI' },
@@ -79,12 +70,20 @@ function FloatingNavbar() {
     navigate('/login');
   };
 
+  const homePath = user
+    ? user.role === 'merchant'
+      ? `/merchant/${user.merchantId || 1}/dashboard`
+      : '/shop'
+    : '/';
+
   return (
     <header className="sticky top-2 sm:top-4 z-50 px-3 sm:px-6 pointer-events-none">
-      <div className="max-w-6xl mx-auto pointer-events-auto">
-        <nav className="glass-navbar-3d rounded-2xl sm:rounded-full px-4 sm:px-6 py-2.5 flex items-center justify-between transition-all">
+      <div className="max-w-7xl mx-auto pointer-events-auto">
+        <nav className="glass-navbar-3d rounded-2xl sm:rounded-full px-4 sm:px-8 py-2.5 flex items-center justify-between transition-all">
+
+
           {/* 3D Brandmark */}
-          <Link to="/" className="flex items-center gap-2.5 group shrink-0">
+          <Link to={homePath} className="flex items-center gap-2.5 group shrink-0">
             <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden flex items-center justify-center shadow-md ring-2 ring-white/90 group-hover:scale-105 group-hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all duration-300 shrink-0 bg-white">
               <img src={rayLogo} alt="AgentReady Logo" className="w-full h-full object-cover" />
             </div>
@@ -98,141 +97,178 @@ function FloatingNavbar() {
             </div>
           </Link>
 
-          {/* Desktop Center Navigation Links (Rendered only when authenticated or has links) */}
+          {/* Desktop Center Navigation Links */}
           {navLinks.length > 0 && (
             <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100/70 backdrop-blur-md rounded-full border border-slate-200/60 shadow-inner">
-              {navLinks.map(({ path, label }) => {
-                const active = isActive(path);
+              {navLinks.map((link) => {
+                const isActive =
+                  location.pathname === link.path ||
+                  (link.path.startsWith('/merchant') && location.pathname.includes(link.path.split('/')[3] || ''));
                 return (
                   <Link
-                    key={path}
-                    to={path}
-                    className={`px-3.5 py-1.5 text-xs rounded-full font-bold transition-all duration-200 ${
-                      active
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_4px_12px_rgba(37,99,235,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] transform -translate-y-0.5'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    key={link.path}
+                    to={link.path}
+                    className={`relative px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-tight transition-all duration-300 ${
+                      isActive
+                        ? 'text-white font-bold shadow-md shadow-blue-500/25'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                   >
-                    {label}
+                    {isActive && (
+                      <span className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-primary transition-all duration-300 -z-10 shadow-xs animate-fadeIn" />
+                    )}
+                    {link.label}
                   </Link>
                 );
               })}
             </div>
           )}
 
-
-          {/* Right Section: User Profile Chip or 3D Sign In CTA */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {loading ? (
-              <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            ) : user ? (
+          {/* Right Action & User Profile Pill */}
+          <div className="flex items-center gap-2">
+            {!user ? (
+              <Link
+                to="/login"
+                className="btn-3d-primary inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-xl sm:rounded-full text-white text-xs font-bold shadow-md cursor-pointer"
+              >
+                <span>Sign In</span>
+                <span>⚡</span>
+              </Link>
+            ) : (
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 hover:bg-white border border-slate-200/90 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                  className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-white/80 hover:bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all cursor-pointer group"
                 >
-                  {user.photoURL && !avatarError ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName}
-                      className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-300"
-                      onError={() => setAvatarError(true)}
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-[11px] font-extrabold flex items-center justify-center shadow-xs">
-                      {user.displayName?.charAt(0)?.toUpperCase() || 'U'}
-                    </div>
-                  )}
-
-
-                  <div className="hidden sm:flex flex-col text-left leading-none">
-                    <span className="text-xs font-bold text-slate-800 truncate max-w-[100px]">
-                      {user.displayName?.split(' ')[0]}
+                  <div className="relative w-7 h-7 rounded-full overflow-hidden ring-1 ring-slate-300 shrink-0 bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                    {user.photoURL ? (
+                      <img
+                        src={user.photoURL}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span>{user.displayName?.charAt(0) || user.role.charAt(0).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="hidden sm:flex flex-col text-left leading-tight pr-1">
+                    <span className="text-xs font-bold text-slate-800 truncate max-w-[90px]">
+                      {user.displayName?.split(' ')[0] || 'User'}
                     </span>
                     <span
                       className={`text-[9px] font-extrabold uppercase tracking-wider ${
-                        user.role === 'admin'
-                          ? 'text-purple-600'
-                          : user.role === 'merchant'
-                          ? 'text-emerald-600'
-                          : 'text-blue-600'
+                        user.role === 'merchant'
+                          ? 'text-emerald-700'
+                          : 'text-primary'
                       }`}
                     >
                       {user.role}
                     </span>
                   </div>
-
-                  <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fillRule="evenodd"
-                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                      clipRule="evenodd"
-                    />
+                  <svg
+                    className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-transform ${
+                      userDropdownOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
 
-                {/* 3D Profile Dropdown */}
+                {/* Profile Dropdown Menu */}
                 {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-60 p-2.5 card-3d rounded-2xl shadow-2xl space-y-1 animate-fadeIn z-50">
-                    <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/50 rounded-xl mb-1">
-                      <div className="text-xs font-bold text-slate-900 truncate">{user.displayName}</div>
-                      <div className="text-[11px] text-slate-400 truncate">{user.email}</div>
-                      <div className="mt-1.5 inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-white text-slate-700 border border-slate-200 shadow-2xs">
-                        Role: {user.role}
+                  <div className="absolute right-0 mt-2 w-64 p-2 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200/90 shadow-2xl z-50 animate-fadeIn text-left space-y-1">
+                    <div className="p-2.5 border-b border-slate-100">
+                      <p className="text-xs font-bold text-slate-900">{user.displayName || 'User'}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                      <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-bold text-slate-700 uppercase">
+                        <span>ROLE: {user.role}</span>
                       </div>
                     </div>
 
                     {user.role === 'buyer' && (
                       <Link
                         to="/merchant/apply"
-                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:text-primary hover:bg-blue-50/60 rounded-xl transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-primary transition-colors"
                       >
-                        🚀 Apply for Merchant Store
+                        <span>🚀</span>
+                        <span>Apply for Merchant Store</span>
                       </Link>
                     )}
 
-                    {user.role === 'merchant' && user.merchantId && (
-                      <Link
-                        to={`/merchant/${user.merchantId}/dashboard`}
-                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50/60 rounded-xl transition-colors"
-                      >
-                        🏬 Store Dashboard
-                      </Link>
+                    {user.role === 'merchant' && (
+                      <>
+                        <Link
+                          to={`/merchant/${user.merchantId || 1}/dashboard`}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <span>📊</span>
+                          <span>Merchant Dashboard</span>
+                        </Link>
+                        <Link
+                          to={`/merchant/${user.merchantId || 1}/audit`}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <span>📜</span>
+                          <span>Audit Trail & Records</span>
+                        </Link>
+                      </>
                     )}
 
-                    {user.role === 'admin' && (
-                      <Link
-                        to="/admin/approvals"
-                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:text-purple-700 hover:bg-purple-50/60 rounded-xl transition-colors"
+                    {user.role === 'buyer' ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await useAuthStore.getState().switchRole('merchant');
+                          setUserDropdownOpen(false);
+                          navigate('/merchant/1/dashboard');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors text-left cursor-pointer"
                       >
-                        🛡️ Merchant Approvals
-                      </Link>
+                        <span>🏬</span>
+                        <span>Switch to Merchant Mode</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await useAuthStore.getState().switchRole('buyer');
+                          setUserDropdownOpen(false);
+                          navigate('/shop');
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors text-left cursor-pointer"
+                      >
+                        <span>🛍️</span>
+                        <span>Switch to Buyer Mode</span>
+                      </button>
                     )}
 
                     <button
+                      type="button"
                       onClick={handleSignOut}
-                      className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50/80 rounded-xl transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
                     >
-                      Sign Out
+                      <span>Sign Out</span>
                     </button>
                   </div>
                 )}
+
               </div>
-            ) : (
-              <Link
-                to="/login"
-                className="btn-3d-primary inline-flex items-center justify-center px-4.5 py-1.5 rounded-full text-white text-xs font-bold transition-all"
-              >
-                Sign In ⚡
-              </Link>
             )}
 
-            {/* Mobile Hamburger Button (only shown when nav links exist) */}
+            {/* Mobile Hamburger Toggle */}
             {navLinks.length > 0 && (
               <button
+                type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
-                aria-label="Toggle navigation menu"
+                className="md:hidden p-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                aria-label="Toggle Menu"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {mobileMenuOpen ? (
@@ -246,71 +282,55 @@ function FloatingNavbar() {
           </div>
         </nav>
 
-
-        {/* 3D Mobile Dropdown */}
-        {mobileMenuOpen && (
-          <div className="md:hidden mt-2 p-4 card-3d rounded-2xl shadow-xl space-y-2 animate-fadeIn">
-            <div className="grid grid-cols-1 gap-1">
-              {navLinks.map(({ path, label }) => (
-                <Link
-                  key={path}
-                  to={path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-between ${
-                    isActive(path)
-                      ? 'bg-blue-50 text-primary'
-                      : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span>{label}</span>
-                  {isActive(path) && <span className="w-2 h-2 rounded-full bg-primary" />}
-                </Link>
-              ))}
-            </div>
-
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
-              {user ? (
-                <button
-                  onClick={handleSignOut}
-                  className="w-full py-2.5 rounded-xl bg-rose-50 text-rose-700 text-center text-xs font-bold border border-rose-200 transition-colors"
-                >
-                  Sign Out ({user.displayName?.split(' ')[0]})
-                </button>
-              ) : (
-                <Link
-                  to="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="btn-3d-primary w-full py-2.5 rounded-xl text-white text-center text-xs font-bold transition-colors"
-                >
-                  Sign In with Google
-                </Link>
-              )}
-            </div>
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && navLinks.length > 0 && (
+          <div className="md:hidden mt-2 p-3 bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200/80 shadow-xl pointer-events-auto space-y-1 animate-fadeIn">
+            {navLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                className={`block px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                  location.pathname === link.path
+                    ? 'bg-primary text-white font-bold'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
         )}
       </div>
     </header>
   );
-
 }
 
+/* ─── TOAST NOTIFICATIONS ─── */
 function Toasts() {
   const { toasts, removeToast } = useUIStore();
-  if (!toasts.length) return null;
+  if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 left-4 sm:left-auto right-4 sm:right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm sm:max-w-md">
-      {toasts.map((t) => (
+    <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm pointer-events-none">
+      {toasts.map((toast) => (
         <div
-          key={t.id}
-          onClick={() => removeToast(t.id)}
-          className={`pointer-events-auto px-4 py-3 rounded-xl shadow-lg text-xs font-medium cursor-pointer border transition-all ${
-            t.type === 'success' ? 'bg-white text-emerald-800 border-emerald-200 shadow-emerald-500/10' :
-            t.type === 'error'   ? 'bg-white text-rose-800 border-rose-200 shadow-rose-500/10' :
-                                  'bg-white text-text border-border'
+          key={toast.id}
+          className={`pointer-events-auto px-4 py-3 rounded-2xl text-xs font-semibold shadow-xl border backdrop-blur-md flex items-center justify-between gap-3 animate-slideUp ${
+            toast.type === 'success'
+              ? 'bg-emerald-950/90 text-emerald-100 border-emerald-500/30'
+              : toast.type === 'error'
+              ? 'bg-rose-950/90 text-rose-100 border-rose-500/30'
+              : 'bg-slate-900/90 text-slate-100 border-slate-700/50'
           }`}
         >
-          {t.message}
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => removeToast(toast.id)}
+            className="text-white/60 hover:text-white transition-colors cursor-pointer text-sm"
+          >
+            &times;
+          </button>
         </div>
       ))}
     </div>
@@ -319,6 +339,7 @@ function Toasts() {
 
 export default function App() {
   const initAuthListener = useAuthStore((s) => s.initAuthListener);
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     const unsub = initAuthListener();
@@ -331,13 +352,43 @@ export default function App() {
       <Toasts />
       <main className="flex-1 w-full overflow-x-hidden">
         <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Landing />} />
+          {/* Public / Entry Routes */}
+          <Route
+            path="/"
+            element={
+              user ? (
+                <Navigate
+                  to={
+                    user.role === 'merchant'
+                      ? `/merchant/${user.merchantId || 1}/dashboard`
+                      : '/shop'
+                  }
+                  replace
+                />
+              ) : (
+                <Landing />
+              )
+            }
+          />
           <Route path="/login" element={<Login />} />
-          <Route path="/shop" element={<BuyerSearch />} />
-          <Route path="/voice" element={<VoiceAssistant />} />
 
           {/* Authenticated Buyer Routes */}
+          <Route
+            path="/shop"
+            element={
+              <RequireAuth>
+                <BuyerSearch />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/voice"
+            element={
+              <RequireAuth>
+                <VoiceAssistant />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/shop/negotiate/:productId"
             element={
@@ -379,11 +430,11 @@ export default function App() {
             }
           />
 
-          {/* Merchant Gated Routes (Requires role: merchant AND owns merchantId) */}
+          {/* Merchant Routes (Full feature suite: Dashboard, Manifest, Policy, Growth, Approvals, Audit, Badge) */}
           <Route
             path="/merchant/:id/manifest"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <ManifestReview />
               </RequireRole>
             }
@@ -391,7 +442,7 @@ export default function App() {
           <Route
             path="/merchant/:id/dashboard"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <MerchantDashboard />
               </RequireRole>
             }
@@ -399,7 +450,7 @@ export default function App() {
           <Route
             path="/merchant/:id/policy"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <PolicySettings />
               </RequireRole>
             }
@@ -407,7 +458,7 @@ export default function App() {
           <Route
             path="/merchant/:id/growth"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <GrowthDashboard />
               </RequireRole>
             }
@@ -415,52 +466,53 @@ export default function App() {
           <Route
             path="/merchant/:id/approvals"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <MerchantApprovals />
               </RequireRole>
             }
           />
           <Route
+            path="/merchant/:id/audit"
+            element={
+              <RequireRole role="merchant">
+                <AuditLog />
+              </RequireRole>
+            }
+          />
+
+          <Route
             path="/merchant/:id/certificate"
             element={
-              <RequireRole role="merchant" checkMerchantOwnership>
+              <RequireRole role="merchant">
                 <AgentReadyCertificate />
               </RequireRole>
             }
           />
 
-          {/* Admin Gated Routes */}
-          <Route
-            path="/admin/approvals"
-            element={
-              <RequireRole role="admin">
-                <AdminApprovals />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/admin/audit"
-            element={
-              <RequireRole role="admin">
-                <AuditLog />
-              </RequireRole>
-            }
-          />
+          {/* Redirects for legacy admin links */}
+          <Route path="/admin/approvals" element={<Navigate to="/merchant/1/approvals" replace />} />
+          <Route path="/admin/audit" element={<Navigate to="/merchant/1/audit" replace />} />
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border mt-16 sm:mt-20 py-8 bg-surface">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-secondary text-center sm:text-left">
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-            <img src={rayLogo} alt="AgentReady" className="w-5 h-5 rounded-full object-cover shadow-2xs ring-1 ring-border/50" />
+      {/* Modern Minimal 3D Footer */}
+      <footer className="border-t border-border bg-white/70 backdrop-blur-md py-6 sm:py-8 text-center text-xs text-text-secondary mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 flex flex-col sm:flex-row items-center justify-between gap-4">
+
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full overflow-hidden shadow-xs ring-1 ring-slate-200">
+              <img src={rayLogo} alt="Logo" className="w-full h-full object-cover" />
+            </div>
             <span className="font-semibold text-text">AgentReady</span>
-            <span>—</span>
+            <span>&mdash;</span>
             <span>Autonomous Commerce Readiness Platform</span>
           </div>
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-text-tertiary">
+          <div className="flex items-center gap-4 text-text-tertiary text-[11px]">
             <span>Powered by Razorpay Test API</span>
-            <span className="hidden sm:inline">·</span>
+            <span>&middot;</span>
             <span>Firebase Auth & RTDB</span>
           </div>
         </div>
@@ -468,3 +520,4 @@ export default function App() {
     </div>
   );
 }
+

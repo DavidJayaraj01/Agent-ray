@@ -129,8 +129,9 @@ export default function MerchantApply() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto my-8 px-4">
-      <div className="bg-white rounded-3xl border border-border shadow-lg p-6 sm:p-10 space-y-8 animate-fadeIn">
+    <div className="w-full max-w-[1200px] mx-auto my-8 px-4 sm:px-8 lg:px-12 animate-fadeIn">
+      <div className="bg-white rounded-3xl border border-border shadow-lg p-6 sm:p-10 space-y-8">
+
         {/* Header */}
         <div className="space-y-2 border-b border-border/80 pb-6">
           <div className="flex items-center gap-2">

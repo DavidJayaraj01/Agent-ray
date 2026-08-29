@@ -4,7 +4,6 @@ This is the safety gate between LLM proposals and payment actions.
 Every offer MUST pass through this engine before reaching Razorpay.
 """
 
-
 class PolicyViolation(Exception):
     """Raised when an offer violates merchant policy."""
 
@@ -26,12 +25,19 @@ def check_negotiation_rate(
     product_id: int,
     window_minutes: int = 10,
     max_attempts: int = 5,
+    proposed_price: float | None = None,
+    original_price: float | None = None,
 ) -> dict:
     """Rate-limit negotiations on the same product.
 
     Blocks buyer agents making more than max_attempts negotiations
     on the same product within the time window.
+    Bypassed when purchasing at full list price or for standard <= 500 orders.
     """
+    if proposed_price is not None and original_price is not None:
+        if proposed_price >= original_price or original_price <= 500:
+            return {"approved": True, "attempts": 0}
+
     key = f"negotiate_{product_id}"
     now = _time.time()
     window_seconds = window_minutes * 60
@@ -48,7 +54,7 @@ def check_negotiation_rate(
             "reason": (
                 f"Rate limit exceeded: {max_attempts} negotiation attempts "
                 f"on product #{product_id} in the last {window_minutes} minutes. "
-                f"This may indicate automated abuse. Please wait and try again."
+                f"Please wait before trying again."
             ),
             "attempts": len(_rate_tracker[key]),
             "window_minutes": window_minutes,
@@ -65,6 +71,9 @@ def check_anomaly_pattern(proposed_price: float, original_price: float) -> dict:
     """
     if original_price <= 0:
         return {"approved": True, "anomaly": False}
+
+    if proposed_price >= original_price:
+        return {"approved": True, "anomaly": False, "discount_pct": 0.0}
 
     discount_pct = ((original_price - proposed_price) / original_price) * 100
 
@@ -185,6 +194,17 @@ def validate_offer(
     min_price = policy_rules.get("min_price", 100)
     max_auto_order = policy_rules.get("max_auto_order", 50000)
 
+    # DIRECT PURCHASE RULE: If buyer offers full list price (0% discount) or price <= 500 with full price
+    if proposed_price >= original_price:
+        return {
+            "approved": True,
+            "reason": f"Direct purchase approved at full list price ₹{proposed_price:.2f}",
+            "discount_percent": 0.0,
+            "max_allowed_discount": max_discount,
+            "proposed_price": proposed_price,
+            "min_allowed_price": min_price,
+        }
+
     # Check negotiation enabled
     neg_check = check_negotiation_enabled(policy_rules)
     if not neg_check["approved"]:
@@ -210,7 +230,8 @@ def validate_offer(
         }
 
     # Check minimum price
-    min_result = check_min_price(proposed_price, min_price)
+    effective_min_price = min(min_price, original_price)
+    min_result = check_min_price(proposed_price, effective_min_price)
     if not min_result["approved"]:
         return {
             "approved": False,
@@ -218,7 +239,7 @@ def validate_offer(
             "discount_percent": discount_result["discount_percent"],
             "max_allowed_discount": max_discount,
             "proposed_price": proposed_price,
-            "min_allowed_price": min_price,
+            "min_allowed_price": effective_min_price,
         }
 
     # Check order amount limit
@@ -230,7 +251,7 @@ def validate_offer(
             "discount_percent": discount_result["discount_percent"],
             "max_allowed_discount": max_discount,
             "proposed_price": proposed_price,
-            "min_allowed_price": min_price,
+            "min_allowed_price": effective_min_price,
         }
 
     return {
@@ -238,10 +259,10 @@ def validate_offer(
         "reason": (
             f"Offer approved: {discount_result['discount_percent']:.1f}% discount "
             f"(within {max_discount}% limit), price ₹{proposed_price:.2f} "
-            f"(above ₹{min_price:.2f} minimum)"
+            f"(above ₹{effective_min_price:.2f} minimum)"
         ),
         "discount_percent": discount_result["discount_percent"],
         "max_allowed_discount": max_discount,
         "proposed_price": proposed_price,
-        "min_allowed_price": min_price,
+        "min_allowed_price": effective_min_price,
     }

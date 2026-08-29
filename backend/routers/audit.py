@@ -7,12 +7,12 @@ from backend.database import get_db
 from backend.schemas import AuditLogResponse
 from backend.services.audit_service import get_all_logs, get_merchant_logs
 from backend.services.auth_service import (
-    get_current_user, require_role, require_own_merchant, AuthUser,
+    require_role, require_own_merchant, AuthUser,
 )
 
 router = APIRouter(prefix="/api", tags=["audit"])
 
-_require_admin = require_role("admin")
+_require_merchant = require_role("merchant", "admin")
 
 
 @router.get("/audit", response_model=list[AuditLogResponse])
@@ -21,8 +21,9 @@ def list_all_audit_logs(
     status: Optional[str] = Query(None),
     limit: int = Query(200, le=500),
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(_require_admin),
+    user: AuthUser = Depends(_require_merchant),
 ):
+    """Retrieve all audit logs — available directly to Merchants."""
     return get_all_logs(db, merchant_id=merchant_id, status=status, limit=limit)
 
 
@@ -33,4 +34,5 @@ def list_merchant_audit_logs(
     db: Session = Depends(get_db),
     user: AuthUser = Depends(require_own_merchant),
 ):
+    """Retrieve specific merchant's audit logs."""
     return get_merchant_logs(db, merchant_id, limit=limit)

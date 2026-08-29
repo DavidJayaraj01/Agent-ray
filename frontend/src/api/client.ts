@@ -1,21 +1,27 @@
 import axios from 'axios';
 import { auth } from '../lib/firebase';
+import { useAuthStore } from '../stores/authStore';
 
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach Firebase ID Token on every request
+// Attach Firebase ID Token or Store Demo Token on every request
 api.interceptors.request.use(async (config) => {
   try {
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      const token = await currentUser.getIdToken();
-      config.headers.Authorization = `Bearer ${token}`;
+    const storeToken = useAuthStore.getState().idToken;
+    if (storeToken) {
+      config.headers.Authorization = `Bearer ${storeToken}`;
+    } else {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
   } catch (err) {
-    console.warn('Failed to attach Firebase auth token:', err);
+    console.warn('Failed to attach auth token:', err);
   }
   return config;
 });
@@ -23,6 +29,8 @@ api.interceptors.request.use(async (config) => {
 // ─── Auth & Profile ─────────────────────────────────────────
 export const registerUser = () => api.post('/auth/register', {}).then(r => r.data);
 export const fetchMyProfile = () => api.get('/auth/me').then(r => r.data);
+export const switchUserRole = (role: 'buyer' | 'merchant', merchantId: number = 1) =>
+  api.post('/auth/switch-role', { role, merchant_id: merchantId }).then(r => r.data);
 export const applyAsMerchant = (data: {
   business_name: string;
   category: string;
@@ -31,22 +39,28 @@ export const applyAsMerchant = (data: {
 }) => api.post('/auth/apply-merchant', data).then(r => r.data);
 export const fetchApplicationStatus = () => api.get('/auth/application-status').then(r => r.data);
 
-// ─── Admin ──────────────────────────────────────────────────
+
+// ─── Merchant Network Approvals & Users ─────────────────────
 export const fetchMerchantApplications = () => api.get('/admin/applications').then(r => r.data);
 export const approveMerchantApplication = (uid: string) => api.post(`/admin/approve-merchant/${uid}`).then(r => r.data);
 export const rejectMerchantApplication = (uid: string, reason?: string) =>
   api.post(`/admin/reject-merchant/${uid}`, null, { params: { reason } }).then(r => r.data);
 export const fetchAllUsers = () => api.get('/admin/users').then(r => r.data);
 
-// ─── Merchants ─────────────────────────────────────────────
+// ─── Catalog & Manifest ─────────────────────────────────────
+export const createMerchant = (data: { name: string; category: string; raw_catalog_text?: string }) =>
+  api.post('/merchants', data).then(r => r.data);
+export const generateManifest = (merchantId: number) =>
+  api.post(`/manifest/generate/${merchantId}`).then(r => r.data);
 export const fetchMerchants = () => api.get('/merchants').then(r => r.data);
 export const fetchMerchant = (id: number) => api.get(`/merchants/${id}`).then(r => r.data);
-export const createMerchant = (data: any) => api.post('/merchants', data).then(r => r.data);
-export const updateMerchant = (id: number, data: any) => api.put(`/merchants/${id}`, data).then(r => r.data);
+export const uploadCatalog = (merchantId: number, formData: FormData) =>
+  api.post(`/merchants/${merchantId}/catalog/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
 
-// ─── Manifest ──────────────────────────────────────────────
-export const generateManifest = (merchantId: number) => api.post(`/manifest/generate/${merchantId}`).then(r => r.data);
 export const fetchManifest = (merchantId: number) => api.get(`/manifest/${merchantId}`).then(r => r.data);
+export const verifyManifest = (merchantId: number) => api.post(`/manifest/${merchantId}/verify`).then(r => r.data);
 export const updateProduct = (productId: number, data: any) => api.put(`/products/${productId}`, data).then(r => r.data);
 
 // ─── Trust ─────────────────────────────────────────────────
@@ -74,6 +88,7 @@ export const createOrder = (data: { product_id: number; amount: number; negotiat
   api.post('/order/create', data).then(r => r.data);
 export const verifyOrder = (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
   api.post('/order/verify', data).then(r => r.data);
+export const completeTestPayment = (orderId: number) => api.post(`/order/complete-test-payment/${orderId}`).then(r => r.data);
 export const fetchOrder = (orderId: number) => api.get(`/orders/${orderId}`).then(r => r.data);
 export const fetchMyOrders = () => api.get('/orders/mine').then(r => r.data);
 export const fetchPendingOrders = (merchantId: number) => api.get(`/merchant/${merchantId}/pending-orders`).then(r => r.data);
@@ -89,17 +104,10 @@ export const fetchAuditLogs = (merchantId?: number, status?: string) => {
 };
 export const fetchMerchantAudit = (merchantId: number) => api.get(`/audit/${merchantId}`).then(r => r.data);
 
-// ─── Dashboard ─────────────────────────────────────────────
+// ─── Dashboard & Analytics ─────────────────────────────────
 export const fetchDashboard = (merchantId: number) => api.get(`/dashboard/${merchantId}`).then(r => r.data);
-
-// ─── Growth ────────────────────────────────────────────────
-export const fetchGrowthAnalysis = (merchantId: number) => api.get(`/growth/${merchantId}`).then(r => r.data);
-
-// ─── Certificate ───────────────────────────────────────────
 export const fetchCertificate = (merchantId: number) => api.get(`/merchant/${merchantId}/certificate`).then(r => r.data);
-
-// ─── Firebase ──────────────────────────────────────────────
-export const fetchFirebaseStatus = () => api.get('/firebase/status').then(r => r.data);
-export const pingFirebase = () => api.post('/firebase/ping').then(r => r.data);
+export const fetchGrowthData = (merchantId: number) => api.get(`/growth/${merchantId}`).then(r => r.data);
+export const updateGrowthRules = (merchantId: number, data: any) => api.put(`/growth/${merchantId}`, data).then(r => r.data);
 
 export default api;

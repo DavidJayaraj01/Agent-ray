@@ -1,6 +1,7 @@
 """Deterministic policy check endpoint — pure Python, no LLM."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from backend.database import get_db
 from backend.models import Product, Merchant
@@ -59,7 +60,12 @@ def get_policy(
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
-    return merchant.policy_rules
+    return merchant.policy_rules or {
+        "max_discount": 10,
+        "min_price": 100,
+        "max_auto_order": 50000,
+        "negotiation_enabled": True,
+    }
 
 
 @router.put("/policy/{merchant_id}")
@@ -73,17 +79,32 @@ def update_policy(
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
 
-    # Validate policy fields
+    # Filter and validate policy fields
     allowed_keys = {"max_discount", "min_price", "max_auto_order", "negotiation_enabled"}
-    for key in policy:
-        if key not in allowed_keys:
-            raise HTTPException(status_code=400, detail=f"Unknown policy field: {key}")
+    current = dict(merchant.policy_rules or {
+        "max_discount": 10,
+        "min_price": 100,
+        "max_auto_order": 50000,
+        "negotiation_enabled": True,
+    })
 
-    current = merchant.policy_rules or {}
-    current.update(policy)
+    for key, value in policy.items():
+        if key in allowed_keys:
+            current[key] = value
+
     merchant.policy_rules = current
+    flag_modified(merchant, "policy_rules")
     db.commit()
     db.refresh(merchant)
+
+    # Sync updated policy to Firebase RTDB
+    try:
+        from backend.services.firebase_service import _get_db_ref
+        ref = _get_db_ref(f"merchants/{merchant.id}")
+        if ref:
+            ref.update({"policy": current})
+    except Exception:
+        pass
 
     log_event(
         db, actor="merchant", action="policy_updated",

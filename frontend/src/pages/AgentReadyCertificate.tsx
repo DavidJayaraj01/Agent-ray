@@ -1,8 +1,9 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { fetchCertificate } from '../api/client';
 import { Spinner } from '../components';
-import axios from 'axios';
 import { useState } from 'react';
+
 
 export default function AgentReadyCertificate() {
   const { id } = useParams<{ id: string }>();
@@ -11,8 +12,9 @@ export default function AgentReadyCertificate() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['certificate', merchantId],
-    queryFn: () => axios.get(`/api/merchant/${merchantId}/certificate`).then(r => r.data),
+    queryFn: () => fetchCertificate(merchantId),
   });
+
 
   if (isLoading) return <Spinner />;
   if (!data) return <div className="text-center py-16 text-text-secondary">Certificate not found</div>;
@@ -31,8 +33,9 @@ export default function AgentReadyCertificate() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-10 animate-fadeIn">
       {/* Certificate Card */}
+
       <div className="bg-white rounded-3xl border-2 border-border shadow-lg overflow-hidden">
         {/* Certificate Header */}
         <div className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 px-6 sm:px-8 py-8 sm:py-10 text-white text-center relative overflow-hidden">

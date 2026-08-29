@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchDashboard } from '../api/client';
 import { TrustBadge, TrustBreakdownBar, Spinner } from '../components';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatLocalTime, formatLocalDateTime } from '../utils/date';
+
 
 export default function MerchantDashboard() {
   const { id } = useParams<{ id: string }>();
@@ -24,8 +26,10 @@ export default function MerchantDashboard() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-fadeIn">
       {/* Header */}
+
+
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-border">
         <div>
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -158,9 +162,10 @@ export default function MerchantDashboard() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-text">{a.action}</span>
-                      <span className="text-[10px] text-text-tertiary">
-                        {new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <span className="text-[10px] text-text-tertiary" title={formatLocalDateTime(a.timestamp)}>
+                        {formatLocalTime(a.timestamp)}
                       </span>
+
                     </div>
                     <p className="text-text-secondary text-[11px] truncate">{a.reason || 'Completed'}</p>
                   </div>

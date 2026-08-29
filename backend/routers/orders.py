@@ -102,8 +102,10 @@ async def create_order(
             detail=f"Order exceeds auto-limit ₹{max_auto_order:,.0f} and has been submitted for merchant manual approval (Order #{pending_order.id}).",
         )
 
-    if data.amount < min_price:
-        reason = f"Order amount ₹{data.amount:.2f} is below merchant's minimum price of ₹{min_price:.2f}"
+    # Check minimum order price (capped by product's catalog list price)
+    effective_min_price = min(min_price, product.price) if product and product.price > 0 else min_price
+    if data.amount < effective_min_price and data.amount < product.price:
+        reason = f"Order amount ₹{data.amount:.2f} is below minimum allowed price of ₹{effective_min_price:.2f}"
         log_event(
             db, actor="policy", action="order_blocked",
             merchant_id=merchant.id,
@@ -117,8 +119,8 @@ async def create_order(
         )
         raise HTTPException(status_code=403, detail=reason)
 
-    # For standalone single-item discounts, validate max_discount limit
-    if data.amount <= product.price:
+    # For discounted purchases, validate max_discount limit
+    if data.amount < product.price:
         policy_result = validate_offer(product.price, data.amount, rules)
         if not policy_result["approved"]:
             log_event(
@@ -133,6 +135,7 @@ async def create_order(
                 actor_role=actor_role,
             )
             raise HTTPException(status_code=403, detail=policy_result["reason"])
+
 
     # Create Razorpay order
     razorpay_order_id = ""
@@ -329,6 +332,7 @@ async def get_my_orders(
         results.append({
             "id": order.id,
             "razorpay_order_id": order.razorpay_order_id,
+            "razorpay_payment_id": order.razorpay_payment_id or "",
             "amount": order.amount,
             "currency": order.currency,
             "status": order.status,
@@ -340,6 +344,62 @@ async def get_my_orders(
             "merchant_name": merchant.name if merchant else "Merchant",
         })
     return results
+
+
+@router.post("/order/complete-test-payment/{order_id}")
+async def complete_test_payment(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
+    """Mark an order as paid with a valid test Razorpay payment ID."""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(404, "Order not found")
+
+    actor_uid = user.uid if user else order.buyer_uid
+    actor_email = user.email if user else order.buyer_email
+    actor_role = user.role if user else "buyer"
+
+    order.status = "paid"
+    order.razorpay_payment_id = f"pay_test_{os.urandom(6).hex()}"
+    order.razorpay_signature = f"sig_test_{os.urandom(12).hex()}"
+    db.commit()
+    db.refresh(order)
+
+    # Sync to Firebase
+    try:
+        from backend.services.firebase_service import sync_order_to_firebase
+        sync_order_to_firebase({
+            "id": order.id,
+            "razorpay_order_id": order.razorpay_order_id,
+            "razorpay_payment_id": order.razorpay_payment_id,
+            "status": order.status,
+            "verified": True,
+            "buyer_uid": order.buyer_uid,
+        })
+    except Exception:
+        pass
+
+    log_event(
+        db, actor="system", action="payment_verified",
+        merchant_id=order.merchant_id,
+        input_data={"order_id": order.id, "razorpay_payment_id": order.razorpay_payment_id},
+        output_data={"status": "paid", "verified": True},
+        decision="approved",
+        reason=f"Payment verified for order #{order.id} ({order.razorpay_payment_id})",
+        actor_uid=actor_uid,
+        actor_email=actor_email,
+        actor_role=actor_role,
+    )
+
+    return {
+        "status": "paid",
+        "order_id": order.id,
+        "razorpay_payment_id": order.razorpay_payment_id,
+        "razorpay_order_id": order.razorpay_order_id,
+    }
+
 
 
 @router.get("/merchant/{merchant_id}/pending-orders")
@@ -470,12 +530,14 @@ async def get_order(order_id: int, db: Session = Depends(get_db)):
         "order": {
             "id": order.id,
             "razorpay_order_id": order.razorpay_order_id,
+            "razorpay_payment_id": order.razorpay_payment_id or "",
             "amount": order.amount,
             "currency": order.currency,
             "status": order.status,
             "buyer_intent": order.buyer_intent,
             "created_at": order.created_at.isoformat() if order.created_at else "",
         },
+
         "product": {
             "id": product.id,
             "name": product.name,

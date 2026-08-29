@@ -37,8 +37,13 @@ async def negotiate(
     actor_email = user.email if user else ""
     actor_role = user.role if user else "buyer"
 
-    # ABUSE GUARD: Rate limit check
-    rate_check = check_negotiation_rate(data.product_id)
+    # ABUSE GUARD: Rate limit check (bypassed for full price or sub-500 purchases)
+    rate_check = check_negotiation_rate(
+        data.product_id,
+        proposed_price=data.proposed_price,
+        original_price=product.price,
+    )
+
     if not rate_check["approved"]:
         log_event(
             db, actor="policy", action="negotiation_rate_limited",

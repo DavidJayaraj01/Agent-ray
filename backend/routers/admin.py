@@ -1,4 +1,4 @@
-"""Admin-only endpoints — merchant approval, user management."""
+"""Merchant approval and network management endpoints."""
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -6,17 +6,17 @@ from typing import Optional
 
 from backend.database import get_db
 from backend.models import Merchant
-from backend.services.auth_service import get_current_user, require_role, AuthUser
+from backend.services.auth_service import require_role, AuthUser
 from backend.services.audit_service import log_event
 
-logger = logging.getLogger("agentready.admin")
+logger = logging.getLogger("agentready.merchant_approvals")
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-_require_admin = require_role("admin")
+_require_merchant = require_role("merchant", "admin")
 
 
 @router.get("/applications")
-async def list_merchant_applications(user: AuthUser = Depends(_require_admin)):
+async def list_merchant_applications(user: AuthUser = Depends(_require_merchant)):
     """List all pending merchant applications from RTDB."""
     try:
         from backend.services.firebase_service import _get_db_ref
@@ -47,9 +47,9 @@ async def list_merchant_applications(user: AuthUser = Depends(_require_admin)):
 async def approve_merchant(
     uid: str,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(_require_admin),
+    user: AuthUser = Depends(_require_merchant),
 ):
-    """Admin approves a merchant application.
+    """Approve a merchant application.
 
     1. Creates a Merchant record in SQLite
     2. Updates /users/{uid} in RTDB: role → merchant, merchantId → new ID
@@ -58,88 +58,62 @@ async def approve_merchant(
     from backend.services.firebase_service import _get_db_ref
 
     # Read the application
-    try:
-        ref = _get_db_ref(f"merchantApplications/{uid}")
-        app_data = ref.get() if ref else None
-    except Exception:
-        app_data = None
+    app_ref = _get_db_ref(f"merchantApplications/{uid}")
+    app_data = app_ref.get() if app_ref else None
 
     if not app_data:
         raise HTTPException(404, "Merchant application not found.")
-    if app_data.get("status") == "approved":
-        raise HTTPException(400, "Application already approved.")
 
-    # Create merchant in SQLite
+    business_name = app_data.get("businessName", "New Merchant")
+    category = app_data.get("category", "General")
+    email = app_data.get("email", "")
+
+    # Create Merchant in SQLite
     merchant = Merchant(
-        name=app_data.get("businessName", "Unnamed Merchant"),
-        category=app_data.get("category", "General"),
-        raw_catalog_url=app_data.get("catalogUrl", ""),
-        status="active",
+        name=business_name,
+        category=category,
+        api_key=f"ar_live_{uid[:16]}",
+        webhook_secret=f"whsec_{uid[:16]}",
         policy_rules={
-            "max_discount": 10,
-            "min_price": 100,
-            "max_auto_order": 50000,
+            "max_discount": 15.0,
+            "min_price": 500.0,
+            "max_auto_order": 250000.0,
             "negotiation_enabled": True,
+            "max_attempts": 3,
         },
+        trust_score=75.0,
+        owner_uid=uid,
     )
     db.add(merchant)
     db.commit()
     db.refresh(merchant)
 
-    # Sync merchant to Firebase
-    try:
-        from backend.services.firebase_service import sync_merchant_to_firebase
-        sync_merchant_to_firebase({
-            "id": merchant.id,
-            "name": merchant.name,
-            "category": merchant.category,
-            "trust_score": merchant.trust_score,
-            "status": merchant.status,
-            "policy_rules": merchant.policy_rules,
-            "created_at": merchant.created_at.isoformat() if merchant.created_at else None,
+    # Update application status in RTDB
+    if app_ref:
+        app_ref.update({
+            "status": "approved",
+            "approvedAt": app_data.get("createdAt", ""),
+            "merchantId": merchant.id,
         })
-    except Exception:
-        pass
 
-    # Update RTDB user profile: role → merchant, merchantId → new ID
-    try:
-        user_ref = _get_db_ref(f"users/{uid}")
-        if user_ref:
-            user_ref.update({
-                "role": "merchant",
-                "merchantId": merchant.id,
-            })
-    except Exception as e:
-        logger.error(f"Failed to update user role in RTDB: {e}")
-
-    # Update application status
-    try:
-        app_ref = _get_db_ref(f"merchantApplications/{uid}")
-        if app_ref:
-            app_ref.update({
-                "status": "approved",
-                "merchantId": merchant.id,
-                "approvedBy": user.uid,
-                "approvedAt": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc
-                ).isoformat(),
-            })
-    except Exception:
-        pass
+    # Elevate user role in RTDB
+    user_ref = _get_db_ref(f"users/{uid}")
+    if user_ref:
+        user_ref.update({
+            "role": "merchant",
+            "merchantId": merchant.id,
+        })
 
     # Audit log
     log_event(
         db,
-        actor="admin",
-        action="merchant_application_approved",
+        actor="merchant_operator",
+        action="merchant_approved",
         merchant_id=merchant.id,
-        input_data={
-            "applicant_uid": uid,
-            "business_name": app_data.get("businessName"),
-        },
-        output_data={"merchant_id": merchant.id},
+        input_data={"applicant_uid": uid, "business_name": business_name, "category": category},
+        output_data={"merchant_id": merchant.id, "status": "approved"},
         decision="approved",
-        reason=f"Admin {user.email} approved merchant application for {app_data.get('businessName')}",
+        reason=f"Merchant application approved by {user.email}: {business_name} (ID: {merchant.id})",
         actor_uid=user.uid,
         actor_email=user.email,
         actor_role=user.role,
@@ -148,83 +122,70 @@ async def approve_merchant(
     return {
         "status": "approved",
         "merchant_id": merchant.id,
-        "message": f"Merchant '{merchant.name}' created and role assigned.",
+        "business_name": business_name,
+        "uid": uid,
     }
 
 
 @router.post("/reject-merchant/{uid}")
 async def reject_merchant(
     uid: str,
-    reason: str = "Application did not meet requirements.",
+    reason: Optional[str] = None,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(_require_admin),
+    user: AuthUser = Depends(_require_merchant),
 ):
-    """Admin rejects a merchant application."""
+    """Reject a merchant application."""
     from backend.services.firebase_service import _get_db_ref
 
-    try:
-        ref = _get_db_ref(f"merchantApplications/{uid}")
-        app_data = ref.get() if ref else None
-    except Exception:
-        app_data = None
+    app_ref = _get_db_ref(f"merchantApplications/{uid}")
+    app_data = app_ref.get() if app_ref else None
 
     if not app_data:
         raise HTTPException(404, "Merchant application not found.")
 
-    try:
-        ref = _get_db_ref(f"merchantApplications/{uid}")
-        if ref:
-            ref.update({
-                "status": "rejected",
-                "rejectionReason": reason,
-                "rejectedBy": user.uid,
-                "rejectedAt": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc
-                ).isoformat(),
-            })
-    except Exception as e:
-        logger.error(f"Failed to update application status: {e}")
-        raise HTTPException(500, "Failed to reject application.")
+    if app_ref:
+        app_ref.update({
+            "status": "rejected",
+            "rejectionReason": reason or "Application does not meet platform criteria.",
+        })
 
     log_event(
         db,
-        actor="admin",
-        action="merchant_application_rejected",
-        input_data={
-            "applicant_uid": uid,
-            "business_name": app_data.get("businessName"),
-            "reason": reason,
-        },
+        actor="merchant_operator",
+        action="merchant_rejected",
+        merchant_id=None,
+        input_data={"applicant_uid": uid, "reason": reason},
+        output_data={"status": "rejected"},
         decision="rejected",
-        reason=f"Admin {user.email} rejected merchant application: {reason}",
+        reason=f"Application for {app_data.get('businessName')} rejected by {user.email}: {reason}",
         actor_uid=user.uid,
         actor_email=user.email,
         actor_role=user.role,
     )
 
-    return {"status": "rejected", "reason": reason}
+    return {"status": "rejected", "uid": uid, "reason": reason}
 
 
 @router.get("/users")
-async def list_all_users(user: AuthUser = Depends(_require_admin)):
-    """List all registered users from RTDB."""
+async def list_all_users(user: AuthUser = Depends(_require_merchant)):
+    """List all registered users from Firebase RTDB."""
     try:
         from backend.services.firebase_service import _get_db_ref
         ref = _get_db_ref("users")
         if ref:
-            all_users = ref.get() or {}
+            users_dict = ref.get() or {}
             result = []
-            for uid, u_data in all_users.items():
-                if isinstance(u_data, dict):
+            for uid, udata in users_dict.items():
+                if isinstance(udata, dict):
                     result.append({
                         "uid": uid,
-                        "email": u_data.get("email", ""),
-                        "displayName": u_data.get("displayName", ""),
-                        "role": u_data.get("role", "buyer"),
-                        "merchantId": u_data.get("merchantId"),
-                        "createdAt": u_data.get("createdAt", ""),
+                        "email": udata.get("email", ""),
+                        "displayName": udata.get("displayName", ""),
+                        "role": udata.get("role", "buyer"),
+                        "merchantId": udata.get("merchantId"),
+                        "createdAt": udata.get("createdAt", ""),
                     })
             return result
     except Exception as e:
         logger.error(f"Failed to list users: {e}")
-        raise HTTPException(500, "Failed to retrieve users.")
+        raise HTTPException(500, "Failed to retrieve user list.")

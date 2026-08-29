@@ -14,9 +14,16 @@ export default function MerchantOnboarding() {
   const [merchantId, setMerchantId] = useState<number | null>(null);
   const [progress, setProgress] = useState<{ label: string; done: boolean; count?: string }[]>([]);
 
-  const createMut = useMutation({ mutationFn: createMerchant });
-  const manifestMut = useMutation({ mutationFn: generateManifest });
-  const trustMut = useMutation({ mutationFn: computeTrustScore });
+  const createMut = useMutation<any, Error, { name: string; category: string; raw_catalog_text?: string }>({
+    mutationFn: (data) => createMerchant(data),
+  });
+  const manifestMut = useMutation<any, Error, number>({
+    mutationFn: (id) => generateManifest(id),
+  });
+  const trustMut = useMutation<any, Error, number>({
+    mutationFn: (id) => computeTrustScore(id),
+  });
+
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,8 +83,9 @@ export default function MerchantOnboarding() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+    <div className="w-full max-w-[1300px] mx-auto px-4 sm:px-8 lg:px-12 py-10 animate-fadeIn">
       {/* Header */}
+
       <div className="text-center max-w-lg mx-auto mb-10">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-light-blue border border-[#2F6BFF]/20 text-primary text-xs font-semibold shadow-2xs mb-3">
           <span>Catalog Normalization Engine</span>

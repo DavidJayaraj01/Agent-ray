@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAuditLogs, fetchMerchants } from '../api/client';
 import { Spinner, EmptyState } from '../components';
+import { formatLocalTime, formatLocalDateTime } from '../utils/date';
+
 
 export default function AuditLog() {
   const [merchantFilter, setMerchantFilter] = useState<string>('');
@@ -17,8 +19,10 @@ export default function AuditLog() {
   });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-fadeIn">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 sm:mb-8 pb-4 border-b border-border">
+
+
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-primary mb-1">
             System Records
@@ -116,9 +120,10 @@ function AuditRow({ log }: { log: any }) {
         onClick={() => setExpanded(!expanded)}
         className="hover:bg-surface-alt/70 transition-colors cursor-pointer"
       >
-        <td className="px-5 py-3.5 text-text-secondary font-mono text-[11px] whitespace-nowrap">
-          {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        <td className="px-5 py-3.5 text-text-secondary font-mono text-[11px] whitespace-nowrap" title={formatLocalDateTime(log.timestamp)}>
+          {formatLocalTime(log.timestamp)}
         </td>
+
         <td className="px-5 py-3.5">
           <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium ${actor.bg}`}>
             {actor.label}

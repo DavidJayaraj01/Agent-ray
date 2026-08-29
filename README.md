@@ -1,283 +1,194 @@
-# 🚀 AgentReady — Agent Commerce Readiness Platform
+# 🚀 AgentReady — Autonomous Commerce Readiness & Growth Platform
 
-**Make any merchant AI-agent-ready** — normalize catalogs, compute trust scores, and enable AI agents to discover, negotiate, and purchase with full audit trails and Razorpay test-mode payments.
+**Make any merchant AI-agent-ready** — normalize unstructured catalogs, compute verifiable trust scores, configure deterministic policy guardrails, and enable AI buyer agents to discover, negotiate, and purchase with real-time audit trails and Razorpay test-mode payments.
+
+> **Built for Razorpay Buildathon — Track 01: "AI Growth & Agentic Commerce"**
 
 ---
 
-## 📐 Architecture
+## 🌟 Highlights & Key Innovations
+
+- **🛡️ Pure-Python Deterministic Policy Engine**: Immutable guardrails that ensure LLMs NEVER touch money or order execution directly.
+- **⚡ Direct 1-Click Buy Now & Dynamic Price Floors**: Instant checkout at list price, with dynamic sub-₹500 catalog price protection (`effective_min_price = min(policy_min_price, catalog_price)`).
+- **🎙️ Multilingual Voice AI Commerce (Sarvam AI)**: End-to-end voice shopping across 11 Indian languages (Hindi, Tamil, Telugu, Kannada, etc.) powered by Saaras v3 STT & Bulbul v3 TTS.
+- **📈 Proactive AI Growth Agent & 90-Day GMV Simulator**: Automated category-aware cross-sell bundling, statistical pricing outlier detection (z-scores), and abandoned cart recovery nudges.
+- **🤝 Multi-Round Negotiation & WebSocket Streaming**: Real-time proposal streaming with Round 2 counter-offer decision cards (Accept, Counter, Decline).
+- **🌐 Protocol Interoperability & Open Manifest Exports**: Native export into **ACP v0.1** (Agent Commerce Protocol) and **schema.org/Product JSON-LD** for open agent ecosystems (UAP, ACP, x402).
+- **📜 Tamper-Evident Autonomous Audit Trail**: Every LLM proposal, policy gate check, and settlement is recorded with actor attribution and local 12-hour IST timestamps before responding to clients.
+- **🏬 Unified Role Architecture & 1-Click Mode Toggle**: Seamless role switching between **Buyer Mode** and **Merchant Mode** with persistent state across page reloads.
+- **🖥️ Full-Width Expansive Responsive UI**: Designed with high-density grids (up to 5-column product catalogs) and expansive layouts (`max-w-[1720px]`).
+
+---
+
+## 📐 System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     FRONTEND (React + TS + Tailwind)            │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │
-│  │ Landing  │ │ AI Shop  │ │ Merchant │ │ Audit Log        │   │
-│  │ Page     │ │ (Search) │ │ Dashboard│ │ (Decision Trail) │   │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬─────────┘   │
-│       │             │            │                 │             │
-│       └─────────────┴──────┬─────┴─────────────────┘             │
-│                     React Query + Zustand                        │
-│                            │                                     │
-│                     ┌──────┴──────┐                               │
-│                     │ Razorpay    │                               │
-│                     │ Checkout    │                               │
-│                     │ Widget      │                               │
-│                     └──────┬──────┘                               │
-└────────────────────────────┼─────────────────────────────────────┘
-                             │ HTTP (Vite Proxy)
-┌────────────────────────────┼─────────────────────────────────────┐
-│                     BACKEND (FastAPI + SQLite)                    │
-│                            │                                     │
-│  ┌─────────────────────────┴──────────────────────────┐          │
-│  │              API ROUTERS (10 endpoints)             │          │
-│  │  merchants · manifest · trust · intent · match      │          │
-│  │  negotiate · policy · orders · audit · dashboard    │          │
-│  └──────┬──────────┬──────────┬──────────┬────────────┘          │
-│         │          │          │          │                        │
-│  ┌──────┴───┐ ┌────┴────┐ ┌──┴──────┐ ┌┴──────────┐             │
-│  │ Ollama   │ │ Policy  │ │Razorpay │ │ Audit     │             │
-│  │ Local LLM│ │ Engine  │ │ Service │ │ Logger    │             │
-│  │ (intent, │ │ (PURE   │ │ (test   │ │ (append   │             │
-│  │  catalog,│ │ PYTHON, │ │  mode   │ │  only,    │             │
-│  │  negoti- │ │ NO LLM) │ │  only)  │ │  before   │             │
-│  │  ation)  │ │         │ │         │ │  response)│             │
-│  └──────────┘ └────┬────┘ └────┬────┘ └───────────┘             │
-│                    │          │                                   │
-│              ┌─────┴──────────┴──────┐                           │
-│              │   SAFETY GATE FLOW    │                           │
-│              │                       │                           │
-│              │  LLM proposes offer   │                           │
-│              │        ↓              │                           │
-│              │  Policy Engine checks │                           │
-│              │        ↓              │                           │
-│              │  ✓ approved → Razorpay│                           │
-│              │  ✕ blocked → NO PAY   │                           │
-│              │        ↓              │                           │
-│              │  Audit Log records    │                           │
-│              └───────────────────────┘                           │
-│                                                                  │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────────┐           │
-│  │ SQLite   │  │ Trust        │  │ Catalog          │           │
-│  │ Database │  │ Scorer       │  │ Normalizer       │           │
-│  └──────────┘  └──────────────┘  └──────────────────┘           │
-└──────────────────────────────────────────────────────────────────┘
-
-                     EXTERNAL SERVICES
-┌──────────────┐  ┌──────────────────┐
-│ Ollama       │  │ Razorpay         │
-│ (localhost)  │  │ (Test Mode API)  │
-│ llama3.2     │  │ rzp_test_*       │
-└──────────────┘  └──────────────────┘
-```
-
-### Safety Flow (Critical Path)
-
-```
-Buyer Request → LLM Proposes Offer → Policy Engine Validates
-                                          │
-                                    ┌─────┴─────┐
-                                    │           │
-                                 APPROVED    BLOCKED
-                                    │           │
-                              Create Order   Red Card
-                              (Razorpay)     (No Pay)
-                                    │           │
-                                    └─────┬─────┘
-                                          │
-                                    Audit Log
-                                  (BEFORE response)
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                     FRONTEND (React 18 + TypeScript + Tailwind CSS v4)                 │
+│  ┌────────────┐ ┌──────────────┐ ┌───────────────┐ ┌──────────────┐ ┌──────────────┐ │
+│  │ AI Shop    │ │ Negotiation  │ │ Merchant      │ │ AI Growth    │ │ Audit Trail  │ │
+│  │ & Discovery│ │ & Buy Now    │ │ Operations    │ │ & Simulator  │ │ & Receipts   │ │
+│  └─────┬──────┘ └──────┬───────┘ └───────┬───────┘ └──────┬───────┘ └──────┬───────┘ │
+│        │               │                 │                │                │         │
+│        └───────────────┴─────────┬───────┴────────────────┴────────────────┘         │
+│                      React Query + Zustand (Synchronous Local Hydration)              │
+│                                  │                                                   │
+│                      ┌───────────┴───────────┐                                       │
+│                      │ Razorpay Checkout SDK │                                       │
+│                      │ (Test Mode API)       │                                       │
+│                      └───────────┬───────────┘                                       │
+└──────────────────────────────────┼───────────────────────────────────────────────────┘
+                                   │ HTTP / WebSocket Proxy
+┌──────────────────────────────────┼───────────────────────────────────────────────────┐
+│                     BACKEND (FastAPI + SQLAlchemy + SQLite)                          │
+│                                  │                                                   │
+│  ┌───────────────────────────────┴────────────────────────────────────────┐          │
+│  │                   API ROUTERS & WEBSOCKET ENGINE (14 Modules)          │          │
+│  │  merchants · manifest · trust · intent · match · negotiate · ws        │          │
+│  │  policy · growth · voice · export · orders · audit · auth · firebase   │          │
+│  └───────┬────────────┬────────────┬─────────────┬────────────┬───────────┘          │
+│          │            │            │             │            │                      │
+│  ┌───────┴────┐ ┌─────┴─────┐ ┌────┴─────┐ ┌─────┴─────┐ ┌────┴─────────┐            │
+│  │ Ollama /   │ │ Pure      │ │ Sarvam AI│ │ Razorpay  │ │ Audit Logger │            │
+│  │ Gemini LLM │ │ Policy    │ │ Voice STT│ │ Service   │ │ (Pre-Response│            │
+│  │ (Intent &  │ │ Engine    │ │ & TTS v3 │ │ (Test     │ │  Attribution,│            │
+│  │  Catalog)  │ │ (NO LLM)  │ │ Engine   │ │  Enforced)│ │  IST Time)   │            │
+│  └────────────┘ └─────┬─────┘ └──────────┘ └─────┬─────┘ └──────────────┘            │
+│                       │                          │                                   │
+│                 ┌─────┴──────────────────────────┴─────┐                             │
+│                 │          SAFETY GATE PIPELINE        │                             │
+│                 │                                      │                             │
+│                 │  Buyer Request / Instant Buy Now     │                             │
+│                 │                   ↓                  │                             │
+│                 │  Policy Engine validates constraints │                             │
+│                 │                   ↓                  │                             │
+│                 │  ✓ Approved → Razorpay Order ID      │                             │
+│                 │  ✕ Blocked  → Red Card (Zero Pay)    │                             │
+│                 │                   ↓                  │                             │
+│                 │  Audit Log committed to SQLite & RTDB│                             │
+│                 └──────────────────────────────────────┘                             │
+│                                                                                      │
+│  ┌────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐  │
+│  │ SQLite DB      │  │ Trust Scorer     │  │ AI Growth Agent  │  │ Realtime Sync  │  │
+│  │ (12 Merchants) │  │ (0–100 Rating)   │  │ (Attach & GMV)   │  │ (Firebase RTDB)│  │
+│  └────────────────┘  └──────────────────┘  └──────────────────┘  └────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🏗️ Tech Stack
+## 🏗️ Technology Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | React 18 + TypeScript | UI framework |
-| **Styling** | Tailwind CSS v4 | Razorpay Docs aesthetic |
-| **Server State** | React Query | API data caching |
-| **UI State** | Zustand | Client-side state |
-| **Backend** | FastAPI (Python) | REST API |
-| **Database** | SQLite + SQLAlchemy | Relational data |
-| **LLM** | Ollama (local) | Intent parsing, negotiation, catalog normalization |
-| **Payments** | Razorpay Orders API | Test-mode checkout |
+| Layer | Technology | Key Capabilities & Rationale |
+|---|---|---|
+| **Frontend** | React 18 + TypeScript + Vite | Type-safe, ultra-fast compilation, zero client-side latency |
+| **Styling & Layout** | Tailwind CSS v4 + Vanilla CSS | Modern glassmorphism, 3D buttons, full-width responsive grids |
+| **State Management** | Zustand + React Query | Synchronous token hydration on line 1, automated caching |
+| **Backend** | FastAPI (Python 3.10+) | High-throughput async REST endpoints & native WebSockets |
+| **Database** | SQLite + SQLAlchemy ORM | Local relational storage with `flag_modified` live persistence |
+| **Cloud Sync & Auth** | Firebase Auth & Realtime Database | Real-time cross-device sync, Google OAuth token verification |
+| **Voice AI Engine** | Sarvam AI (Saaras & Bulbul v3) | Native speech-to-text & text-to-speech across 11 Indian languages |
+| **Payments** | Razorpay Test Mode API | HMAC-SHA256 signature verification, strict live-key guardrails |
+| **Local LLM** | Ollama (`llama3.2`) / Rule Fallbacks | Zero-cost semantic matching, intent parsing & negotiation |
 
 ---
 
 ## ⚡ Quick Start
 
-### Prerequisites
+### 1. Prerequisites
 - **Python 3.10+**
 - **Node.js 18+**
-- **Ollama** (optional, for AI features): [ollama.com/download](https://ollama.com/download)
+- **Ollama** (optional, for local AI parsing): [ollama.com/download](https://ollama.com/download)
 
-### 1. Backend Setup
-
+### 2. Backend Setup
 ```bash
-cd backend
-cp .env.example .env
-# Edit .env with your Razorpay test keys
+# Clone the repository
+git clone https://github.com/DavidJayaraj01/Agent-ray.git
+cd Agent-ray
 
-python -m venv venv
+# Create and activate Python virtual environment
+python -m venv backend/venv
 # Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
+backend\venv\Scripts\activate
+# macOS / Linux:
+source backend/venv/bin/activate
 
-pip install -r requirements.txt
+# Install backend dependencies
+pip install -r backend/requirements.txt
+
+# Configure environment variables
+cp backend/.env.example backend/.env
 ```
 
-### 2. Start Backend
-
+### 3. Start Backend Server
 ```bash
-# From project root
+# Launch FastAPI backend on port 8000
 uvicorn backend.main:app --reload --port 8000
 ```
+*Note: On first startup, the server automatically initializes SQLite and seeds **12 real-world enterprise merchants** with 161 verified products, manifests, and audit records.*
 
-The backend auto-seeds **3 demo merchants** on first startup.
-
-### 3. (Optional) Start Ollama
-
+### 4. Frontend Setup & Launch
 ```bash
-# Install Ollama, then:
-ollama pull llama3.2
-ollama serve
-```
-
-Without Ollama, the app uses intelligent rule-based fallbacks.
-
-### 4. Frontend Setup & Start
-
-```bash
-# Navigate to frontend directory
 cd frontend
 npm install
 npm run dev
 ```
-
-Visit **http://localhost:5173** 🎉
-
----
-
-## 🎯 Demo Script
-
-### Step 1: Browse the Marketplace
-Open `http://localhost:5173` — 3 pre-seeded merchants with trust scores:
-- **SportGear Pro** (Score: 93 🟢) — clean catalog
-- **Ananya's Fashion Hub** (Score: 78 🟡) — deliberately messy data
-- **TechBazaar** (Score: 90+ 🟢) — moderate quality
-
-### Step 2: Onboard a New Merchant
-Click **"+ Add Merchant"** → enter details → paste messy CSV → watch AI normalize it in real-time with progress indicators.
-
-### Step 3: Review the Manifest
-View normalized products — yellow-flagged fields show low confidence. Click to edit inline, or hit "Approve" to verify.
-
-### Step 4: AI-Powered Shopping
-Go to **"AI Shop"** → type natural language:
-```
-black running shoes under ₹5000, arrive tomorrow
-```
-See ranked results with match percentages and "why this one" checklists.
-
-### Step 5: Negotiate & Buy
-- Click **"Negotiate & Buy"** on any product
-- **Reasonable offer** (5-10% off) → ✅ accepted → proceed to checkout
-- **Excessive offer** (25% off) → 🚫 **BLOCKED** by policy engine → red card, no payment attempt
-
-### Step 6: AI Growth & Upsell Agent (Cross-Sell Engine)
-- When an offer is accepted, the **AI Growth Agent** presents a smart, category-aware **"Frequently Bought Together"** bundle (e.g., MagSafe Armor Case + 25W Charger for phones, Anti-Blister Socks for shoes).
-- 1-click **"Add to Order"** seamlessly expands the cart with an exclusive bundle discount, verified by the policy engine and reflected on the Razorpay checkout total.
-
-### Step 7: AI Growth Agent & GMV Optimization
-Visit **"Merchant Dashboard" → "AI Growth Engine"** (`/merchant/:id/growth`):
-- Proactive cross-sell analysis with attach rates (e.g., 68% attach rate for phone + audio bundle).
-- Statistical category pricing outlier detection using standard deviation z-scores.
-- Policy-gated abandoned-cart recovery nudges.
-- 90-day GMV simulation: baseline organic vs agent-assisted projected revenue with weekly chart comparisons.
-
-### Step 8: Multi-Lingual Voice Commerce with Sarvam AI
-Visit **"Voice AI"** (`/voice`):
-- Speak natural intent in 11 Indian languages (Hindi, Tamil, Telugu, Kannada, Bengali, etc.).
-- Audio transcribed with Sarvam AI **Saaras v3**, parsed through local LLM / intent engine.
-- Matching products surfaced immediately and spoken back with Sarvam AI **Bulbul v3** text-to-speech.
-
-### Step 9: Live WebSocket & Multi-Round Counter Negotiation
-Visit **"AI Shop" → "Negotiate"**:
-- Real-time streaming negotiation transcript powered by WebSockets (`/ws/negotiate/{id}`).
-- Watch buyer agent proposals, AI deliberation, and policy gate checks stream live.
-- **Round 2 Counter-Offers**: If the merchant AI counters, the buyer can accept the counter, propose a round 2 revision, or decline.
-
-### Step 10: Protocol Interoperability & Public Certificate
-- **ACP Envelope**: Export normalized catalogs into Agent Commerce Protocol (ACP v0.1) format at `/api/export/acp/{id}`.
-- **schema.org/Product**: Machine-readable JSON-LD export at `/api/export/schema-org/{id}`.
-- **Shareable Certificate**: Public badge page at `/merchant/:id/certificate` featuring animated trust score ring, verification SHA-256 hash, and tier badges.
-
-### Step 11: Audit Everything
-Visit **"Audit"** → see every LLM decision, bundle expansion, and policy check with timestamps, synced live to Firebase Firestore.
+Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 🛡️ Safety & Abuse Guard Rules
+## 📱 Application Pages & Routes
 
-1. **LLM NEVER directly creates orders** — all money flows through the deterministic policy engine
-2. **Policy engine is pure Python** — deterministic, no LLM, 34 unit tests
-3. **Abuse & Anomaly Guard** — enforces rate-limiting (max 5 negotiation attempts per 10 minutes) and flags aggressive >50% discount anomalies
-4. **Audit log is append-only** — writes BEFORE any user-facing response
-5. **Live Razorpay keys are REJECTED** at startup (only `rzp_test_*` accepted)
-6. **Explicit failure test** — discounts exceeding `max_discount` are blocked before reaching Razorpay
+### 🛍️ Buyer Experience
+1. **Marketplace & Landing (`/`)**: Hero section, enterprise merchant network, category filters, and quick storefront launcher.
+2. **AI Autonomous Shop (`/shop`)**: Natural language discovery, parsed intent diagnostic chips, 5-column product grid with agent compatibility scores.
+3. **Voice AI Assistant (`/voice`)**: Sarvam AI voice studio with 11 language toggles, real-time waveform recording, and audio playback.
+4. **Negotiation & 1-Click Buy (`/shop/negotiate/:productId`)**:
+   - `⚡ Buy Now (₹{price})`: Instant direct checkout at list price.
+   - `💬 AI Negotiation`: Real-time WebSocket offer stream, Round 2 counter-offer card, and AI Growth cross-sell bundle addons.
+5. **My Orders (`/shop/orders`)**: Purchase history with order timestamps (IST), Razorpay payment IDs, and verification statuses.
+6. **Payment Receipt (`/shop/receipt/:orderId`)**: Tamper-evident receipt with buyer intent, bundle badges, and Razorpay HMAC verification.
 
-### Run Safety & Abuse Guard Tests
+### 🏬 Merchant Experience
+7. **Merchant Dashboard (`/merchant/:id/dashboard`)**: Trust score breakdown, catalog metrics, match efficiency chart, and protocol export buttons.
+8. **Catalog Manifest Review (`/merchant/:id/manifest`)**: Normalized product inventory, confidence scores, and inline catalog editors.
+9. **Policy Guardrail Settings (`/merchant/:id/policy`)**: Maximum discount slider, minimum price floor, max auto-order cap, and instant SQLite persistence.
+10. **AI Growth Engine (`/merchant/:id/growth`)**: Cross-sell attach rates, pricing outlier z-scores, cart recovery nudges, and 90-day GMV uplift simulations.
+11. **Manual Order Approvals (`/merchant/:id/approvals`)**: Policy queue for reviewing and approving high-value orders exceeding `max_auto_order`.
+12. **Autonomous Audit Trail (`/merchant/:id/audit`)**: Full tamper-evident ledger of every LLM proposal, policy gate decision, and local IST timestamp.
+13. **Agent-Ready Certificate (`/merchant/:id/certificate`)**: Public badge with animated SVG trust gauge and deterministic SHA-256 verification hash.
+14. **Merchant Application (`/merchant/apply`)**: Onboarding portal for new stores to apply for AgentReady certification.
+
+---
+
+## 🛡️ Safety Invariants & Guardrails
+
+1. **Deterministic Execution**: The Policy Engine is written in pure Python. LLMs never make financial decisions or execute payments.
+2. **Dynamic Price Floor**: Catalog items listed under ₹500 (e.g. ₹418, ₹449) or purchases at list price are automatically protected and never blocked.
+3. **Abuse Rate Limiting**: Max 5 negotiation attempts per product within a 10-minute window. Demands with >50% discount are blocked as anomalies.
+4. **Pre-Response Audit Logging**: All actions and policy decisions are written to the append-only ledger before any response is dispatched.
+5. **Fail-Closed Payment Safety**: Live Razorpay keys (`rzp_live_*`) are blocked at startup to prevent accidental real-money transactions.
+
+---
+
+## 🧪 Verification & Testing
+
 ```bash
-python -m pytest backend/tests/test_policy_engine.py -v
-# 34 tests, all passing ✅
+# Run backend pytest suite (43 tests)
+pytest backend/tests -v
+
+# Run frontend linting & production build
+cd frontend
+npm run lint
+npm run build
 ```
+
+- **Backend Pytest Suite**: **43 / 43 passed (100%)**
+- **Frontend Oxlint**: **0 errors, 0 warnings**
+- **TypeScript & Vite Build**: **Production bundle compiled successfully**
 
 ---
 
-## 📄 Additional Documentation
-
-- [**Backend README**](backend/README.md) — API reference, data models, service architecture
-- [**Frontend README**](frontend/README.md) — Component guide, 12 page views, design system
-
----
-
-## 📁 Project Structure
-
-```
-Agent-Ray/
-├── backend/
-│   ├── main.py              # FastAPI app + startup safety checks
-│   ├── database.py          # SQLite + SQLAlchemy setup
-│   ├── models.py            # ORM models (Merchant, Product, Manifest, Order, AuditLog, Negotiation)
-│   ├── schemas.py           # Pydantic request/response schemas
-│   ├── seed_data.py         # Real-world merchants (Meesho, Amazon India, Flipkart)
-│   ├── .env.example         # Environment variables template (Razorpay, Ollama, Firebase, Sarvam)
-│   ├── requirements.txt     # Python dependencies
-│   ├── routers/             # 15 API routers (merchants, manifest, trust, intent, match,
-│   │                        #  negotiate, policy, orders, audit, dashboard, firebase,
-│   │                        #  voice, growth, export, certificate, ws_negotiate)
-│   └── services/            # Core logic (policy_engine, growth_engine, sarvam_service,
-│                            #  llm_service, trust_scorer, catalog_normalizer, razorpay_service)
-├── frontend/                # React 19 + TypeScript + Tailwind CSS
-│   ├── src/
-│   │   ├── App.tsx          # Floating navbar & router
-│   │   ├── main.tsx         # App entry point
-│   │   ├── index.css        # Razorpay aesthetic design tokens
-│   │   ├── api/client.ts    # Axios client & REST endpoints
-│   │   ├── stores/uiStore.ts# Zustand UI state
-│   │   ├── components/      # Shared components (TrustBadge, ProductCard, etc.)
-│   │   └── pages/           # 12 page components (Marketplace, Onboarding, Review,
-│   │                        #  Dashboard, Policy, Shop, NegotiationCheckout, Receipt,
-│   │                        #  AuditLog, VoiceAssistant, GrowthDashboard, Certificate)
-│   ├── package.json
-│   └── vite.config.ts
-├── README.md                # ← you are here
-└── PROJECT_SUMMARY_AND_FEATURES.txt # Complete text summary of all features & work done
-```
-
----
-
-## 📜 License
-
-Built for the Razorpay hackathon. MIT License.
+## 📄 License & Attribution
+Built by **David Jayaraj** for the **Razorpay Buildathon — Track 01: AI Growth & Agentic Commerce**.
+Licensed under the MIT License.

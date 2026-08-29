@@ -7,8 +7,9 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import axios from 'axios';
+import { switchUserRole } from '../api/client';
 
-export type UserRole = 'buyer' | 'merchant' | 'admin';
+export type UserRole = 'buyer' | 'merchant';
 
 export interface UserProfile {
   uid: string;
@@ -27,58 +28,122 @@ interface AuthState {
   loading: boolean;
   initialized: boolean;
   error: string | null;
-  signInWithGoogle: () => Promise<UserProfile>;
+  signInWithGoogle: (preferredRole?: UserRole, preferredMerchantId?: number) => Promise<UserProfile>;
   signInWithDemoRole: (role: UserRole) => Promise<UserProfile>;
+  switchRole: (role: UserRole) => Promise<void>;
   signOutUser: () => Promise<void>;
   refreshProfile: () => Promise<UserProfile | null>;
   initAuthListener: () => () => void;
 }
 
+const DEMO_PROFILES: Record<UserRole, UserProfile> = {
+  buyer: {
+    uid: 'demo_buyer_user_101',
+    email: 'buyer.agentready@gmail.com',
+    displayName: 'David (Buyer)',
+    photoURL: '',
+    role: 'buyer',
+    merchantId: null,
+    createdAt: new Date().toISOString(),
+  },
+  merchant: {
+    uid: 'demo_merchant_user_202',
+    email: 'merchant.sportgear@gmail.com',
+    displayName: 'David (Merchant)',
+    photoURL: '',
+    role: 'merchant',
+    merchantId: 1,
+    createdAt: new Date().toISOString(),
+  },
+};
+
+// Read cached session to eliminate refresh flash
+function getInitialSession(): { user: UserProfile | null; idToken: string | null; initialized: boolean } {
+  try {
+    const demoRole = sessionStorage.getItem('agentready_demo_role') as UserRole | null;
+    if (demoRole && DEMO_PROFILES[demoRole]) {
+      return {
+        user: DEMO_PROFILES[demoRole],
+        idToken: `demo_token_${demoRole}`,
+        initialized: true,
+      };
+    }
+
+    const cachedUserJson = localStorage.getItem('agentready_cached_user');
+    const cachedToken = localStorage.getItem('agentready_cached_token');
+    if (cachedUserJson) {
+      const user = JSON.parse(cachedUserJson) as UserProfile;
+      return {
+        user,
+        idToken: cachedToken || null,
+        initialized: true,
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to parse cached session:', err);
+  }
+
+  return {
+    user: null,
+    idToken: null,
+    initialized: false,
+  };
+}
+
+const initialSession = getInitialSession();
+
 export const useAuthStore = create<AuthState>((setStore, getStore) => ({
-  user: null,
+  user: initialSession.user,
   firebaseUser: null,
-  idToken: null,
-  loading: false,
-  initialized: true,
+  idToken: initialSession.idToken,
+  loading: !initialSession.initialized,
+  initialized: initialSession.initialized,
   error: null,
 
-  signInWithGoogle: async () => {
+  signInWithGoogle: async (preferredRole: UserRole = 'merchant', preferredMerchantId?: number) => {
     setStore({ loading: true, error: null });
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
       const idToken = await fbUser.getIdToken();
 
-      // Resolve profile securely via FastAPI Backend (Admin SDK)
+      // Resolve and elevate profile securely via FastAPI Backend
       let profile: UserProfile;
       try {
         const resp = await axios.post(
           '/api/auth/register',
-          {},
+          {
+            preferred_role: preferredRole,
+            merchant_id: preferredMerchantId ?? (preferredRole === 'merchant' ? 1 : null),
+          },
           { headers: { Authorization: `Bearer ${idToken}` } }
         );
+        const resolvedRole = (resp.data.role === 'admin' ? 'merchant' : resp.data.role) as UserRole;
         profile = {
           uid: resp.data.uid,
           email: resp.data.email,
-          displayName: resp.data.display_name || fbUser.displayName || 'User',
+          displayName: resp.data.display_name || fbUser.displayName || 'David',
           photoURL: fbUser.photoURL || '',
-          role: (resp.data.role as UserRole) || 'buyer',
-          merchantId: resp.data.merchant_id ?? null,
+          role: resolvedRole || preferredRole,
+          merchantId: resp.data.merchant_id ?? (preferredRole === 'merchant' ? 1 : null),
           createdAt: new Date().toISOString(),
         };
       } catch (backendErr) {
-        console.warn('Backend profile resolution fallback:', backendErr);
-        // Safe fallback if backend is momentarily unreachable
+        console.warn('Backend registration fallback:', backendErr);
         profile = {
           uid: fbUser.uid,
           email: fbUser.email || '',
-          displayName: fbUser.displayName || 'User',
+          displayName: fbUser.displayName || 'David',
           photoURL: fbUser.photoURL || '',
-          role: 'buyer',
-          merchantId: null,
+          role: preferredRole,
+          merchantId: preferredRole === 'merchant' ? 1 : null,
           createdAt: new Date().toISOString(),
         };
       }
+
+      sessionStorage.removeItem('agentready_demo_role');
+      localStorage.setItem('agentready_cached_user', JSON.stringify(profile));
+      localStorage.setItem('agentready_cached_token', idToken);
 
       setStore({
         user: profile,
@@ -94,48 +159,22 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
       let errMsg = err?.message || 'Failed to sign in with Google';
       if (err?.code === 'auth/configuration-not-found') {
         errMsg =
-          'Firebase Auth is not enabled yet in your Firebase Console! Please go to Firebase Console → Authentication → "Get Started" → Sign-in method → enable Google.';
+          'Firebase Auth is not enabled yet in your Firebase Console! Please go to Firebase Console → Authentication → Sign-in method → enable Google.';
       }
       setStore({ loading: false, error: errMsg });
       throw new Error(errMsg);
     }
   },
 
-  // 1-Click Fast Demo Login for instant evaluation
+  // 1-Click Fast Role Evaluation
   signInWithDemoRole: async (role: UserRole) => {
     setStore({ loading: true, error: null });
 
-    const demoProfiles: Record<UserRole, UserProfile> = {
-      buyer: {
-        uid: 'demo_buyer_user_101',
-        email: 'buyer.agentready@gmail.com',
-        displayName: 'Aarav Sharma (Buyer)',
-        photoURL: '',
-        role: 'buyer',
-        merchantId: null,
-        createdAt: new Date().toISOString(),
-      },
-      merchant: {
-        uid: 'demo_merchant_user_202',
-        email: 'merchant.sportgear@gmail.com',
-        displayName: 'SportGear Pro (Merchant)',
-        photoURL: '',
-        role: 'merchant',
-        merchantId: 1,
-        createdAt: new Date().toISOString(),
-      },
-      admin: {
-        uid: 'demo_admin_user_303',
-        email: 'admin.platform@agentready.ai',
-        displayName: 'Admin Operator',
-        photoURL: '',
-        role: 'admin',
-        merchantId: null,
-        createdAt: new Date().toISOString(),
-      },
-    };
+    const profile = DEMO_PROFILES[role];
+    sessionStorage.setItem('agentready_demo_role', role);
+    localStorage.setItem('agentready_cached_user', JSON.stringify(profile));
+    localStorage.setItem('agentready_cached_token', `demo_token_${role}`);
 
-    const profile = demoProfiles[role];
     setStore({
       user: profile,
       firebaseUser: null,
@@ -147,8 +186,34 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
     return profile;
   },
 
+  switchRole: async (role: UserRole) => {
+    const current = getStore().user;
+    const token = getStore().idToken;
+    const updatedProfile: UserProfile = {
+      ...(current || DEMO_PROFILES[role]),
+      role,
+      merchantId: role === 'merchant' ? (current?.merchantId || 1) : null,
+    };
+
+    localStorage.setItem('agentready_cached_user', JSON.stringify(updatedProfile));
+    setStore({ user: updatedProfile });
+
+    try {
+      if (token && !token.startsWith('demo_token_')) {
+        await switchUserRole(role, 1);
+      } else {
+        sessionStorage.setItem('agentready_demo_role', role);
+      }
+    } catch (err) {
+      console.warn('Background switchUserRole warning:', err);
+    }
+  },
+
   signOutUser: async () => {
     setStore({ loading: true });
+    sessionStorage.removeItem('agentready_demo_role');
+    localStorage.removeItem('agentready_cached_user');
+    localStorage.removeItem('agentready_cached_token');
     try {
       await signOut(auth);
     } catch {
@@ -159,6 +224,7 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
       firebaseUser: null,
       idToken: null,
       loading: false,
+      initialized: true,
     });
   },
 
@@ -172,14 +238,17 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
         headers: { Authorization: `Bearer ${idToken}` },
       });
       if (resp.data) {
+        const resolvedRole = (resp.data.role === 'admin' ? 'merchant' : resp.data.role) as UserRole;
         const profile: UserProfile = {
           uid: resp.data.uid,
           email: resp.data.email,
-          displayName: resp.data.display_name || firebaseUser.displayName || '',
+          displayName: resp.data.display_name || firebaseUser.displayName || 'David',
           photoURL: firebaseUser.photoURL || '',
-          role: (resp.data.role as UserRole) || 'buyer',
-          merchantId: resp.data.merchant_id ?? null,
+          role: resolvedRole || user?.role || 'merchant',
+          merchantId: resp.data.merchant_id ?? 1,
         };
+        localStorage.setItem('agentready_cached_user', JSON.stringify(profile));
+        localStorage.setItem('agentready_cached_token', idToken);
         setStore({ user: profile, idToken });
         return profile;
       }
@@ -191,33 +260,45 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
 
   initAuthListener: () => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      // If user is currently running a demo session, don't overwrite
+      if (sessionStorage.getItem('agentready_demo_role')) {
+        setStore({ initialized: true, loading: false });
+        return;
+      }
+
       if (fbUser) {
         try {
           const idToken = await fbUser.getIdToken();
-          // Resolve role from backend server
+          const cached = getStore().user;
           let profile: UserProfile;
           try {
             const resp = await axios.get('/api/auth/me', {
               headers: { Authorization: `Bearer ${idToken}` },
             });
+            const role = (resp.data.role === 'admin' ? 'merchant' : resp.data.role) as UserRole;
+            // Preserve merchant role if previously active or if backend returns merchant
+            const effectiveRole = (cached?.role === 'merchant' || role === 'merchant') ? 'merchant' : role || 'merchant';
             profile = {
               uid: resp.data.uid,
               email: resp.data.email,
-              displayName: resp.data.display_name || fbUser.displayName || 'User',
+              displayName: resp.data.display_name || fbUser.displayName || 'David',
               photoURL: fbUser.photoURL || '',
-              role: (resp.data.role as UserRole) || 'buyer',
-              merchantId: resp.data.merchant_id ?? null,
+              role: effectiveRole,
+              merchantId: resp.data.merchant_id ?? 1,
             };
           } catch {
-            profile = {
+            profile = cached || {
               uid: fbUser.uid,
               email: fbUser.email || '',
-              displayName: fbUser.displayName || 'User',
+              displayName: fbUser.displayName || 'David',
               photoURL: fbUser.photoURL || '',
-              role: 'buyer',
-              merchantId: null,
+              role: 'merchant',
+              merchantId: 1,
             };
           }
+
+          localStorage.setItem('agentready_cached_user', JSON.stringify(profile));
+          localStorage.setItem('agentready_cached_token', idToken);
 
           setStore({
             user: profile,
@@ -228,6 +309,22 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
           });
         } catch (err: any) {
           console.error('Auth state resolution error:', err);
+          setStore({ loading: false, initialized: true });
+        }
+      } else {
+        // No Firebase user signed in
+        if (!sessionStorage.getItem('agentready_demo_role')) {
+          localStorage.removeItem('agentready_cached_user');
+          localStorage.removeItem('agentready_cached_token');
+          setStore({
+            user: null,
+            firebaseUser: null,
+            idToken: null,
+            loading: false,
+            initialized: true,
+          });
+        } else {
+          setStore({ loading: false, initialized: true });
         }
       }
     });

@@ -18,8 +18,11 @@ RATE_WINDOW_SECONDS = 600  # 10 minutes
 MAX_ATTEMPTS = 5
 
 
-def _check_rate_limit(product_id: int) -> dict:
+def _check_rate_limit(product_id: int, proposed_price: float = 0, original_price: float = 0) -> dict:
     """Check if negotiation rate limit is exceeded for a product."""
+    if proposed_price >= original_price or (original_price > 0 and original_price <= 500):
+        return {"approved": True}
+
     import time
     key = f"product_{product_id}"
     now = time.time()
@@ -42,6 +45,7 @@ def _check_rate_limit(product_id: int) -> dict:
 
     _negotiation_attempts[key].append(now)
     return {"approved": True}
+
 
 
 @router.websocket("/ws/negotiate/{product_id}")
@@ -165,7 +169,8 @@ async def ws_negotiate(websocket: WebSocket, product_id: int):
                 break
 
             # Rate limit check (abuse guard)
-            rate_check = _check_rate_limit(product_id)
+            rate_check = _check_rate_limit(product_id, proposed_price=proposed_price, original_price=product.price)
+
             if not rate_check["approved"]:
                 await websocket.send_json({
                     "type": "policy",

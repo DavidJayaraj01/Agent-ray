@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { fetchGrowthData } from '../api/client';
 import { Spinner } from '../components';
-import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export default function GrowthDashboard() {
@@ -10,8 +10,9 @@ export default function GrowthDashboard() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['growth', merchantId],
-    queryFn: () => axios.get(`/api/growth/${merchantId}`).then(r => r.data),
+    queryFn: () => fetchGrowthData(merchantId),
   });
+
 
   if (isLoading) return <Spinner />;
   if (error || !data) return <div className="text-center py-16 text-text-secondary">Failed to load growth data</div>;
@@ -19,8 +20,10 @@ export default function GrowthDashboard() {
   const { cross_sell_opportunities, pricing_outliers, cart_recovery_nudges, gmv_simulation } = data;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 animate-fadeIn">
       {/* Header */}
+
+
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-border">
         <div>
           <div className="flex items-center gap-2 mb-1.5">

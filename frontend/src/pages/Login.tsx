@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, type UserRole } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import rayLogo from '../assets/ray-logo.png';
@@ -10,19 +10,17 @@ export default function Login() {
   const { user, signInWithGoogle, signInWithDemoRole, loading } = useAuthStore();
   const { addToast } = useUIStore();
   const [signingIn, setSigningIn] = useState(false);
-  const [selectedRolePreview, setSelectedRolePreview] = useState<UserRole>('buyer');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('buyer');
   const [configError, setConfigError] = useState<string | null>(null);
 
-  // If already logged in, redirect to origin page or landing page (/)
+  // If already logged in, redirect directly to appropriate dashboard
   useEffect(() => {
     if (user) {
       const from =
         (location.state as any)?.from?.pathname ||
-        (user.role === 'merchant' && user.merchantId
-          ? `/merchant/${user.merchantId}/dashboard`
-          : user.role === 'admin'
-          ? '/admin/approvals'
-          : '/');
+        (user.role === 'merchant'
+          ? `/merchant/${user.merchantId || 1}/dashboard`
+          : '/shop');
       navigate(from, { replace: true });
     }
   }, [user, navigate, location]);
@@ -31,16 +29,13 @@ export default function Login() {
     setSigningIn(true);
     setConfigError(null);
     try {
-      const profile = await signInWithGoogle();
-      addToast(`Welcome back, ${profile.displayName}! (${profile.role.toUpperCase()})`, 'success');
-      const from =
-        (location.state as any)?.from?.pathname ||
-        (profile.role === 'merchant' && profile.merchantId
-          ? `/merchant/${profile.merchantId}/dashboard`
-          : profile.role === 'admin'
-          ? '/admin/approvals'
-          : '/');
-      navigate(from, { replace: true });
+      const profile = await signInWithGoogle(selectedRole, selectedRole === 'merchant' ? 1 : undefined);
+      addToast(`Welcome, ${profile.displayName}! Signed in as ${profile.role.toUpperCase()}`, 'success');
+      const dest =
+        profile.role === 'merchant'
+          ? `/merchant/${profile.merchantId || 1}/dashboard`
+          : '/shop';
+      navigate(dest, { replace: true });
     } catch (err: any) {
       if (err?.message?.includes('Firebase Auth is not enabled')) {
         setConfigError(err.message);
@@ -56,13 +51,11 @@ export default function Login() {
     setSigningIn(true);
     try {
       const profile = await signInWithDemoRole(role);
-      addToast(`Signed in as ${profile.displayName} (${role.toUpperCase()})`, 'success');
+      addToast(`Active session switched to ${profile.displayName} (${role.toUpperCase()})`, 'success');
       const dest =
-        role === 'merchant' && profile.merchantId
-          ? `/merchant/${profile.merchantId}/dashboard`
-          : role === 'admin'
-          ? '/admin/approvals'
-          : '/';
+        role === 'merchant'
+          ? `/merchant/${profile.merchantId || 1}/dashboard`
+          : '/shop';
       navigate(dest, { replace: true });
     } catch {
       addToast('Failed to switch demo user', 'error');
@@ -71,19 +64,17 @@ export default function Login() {
     }
   };
 
-
   return (
     <div className="relative min-h-[90vh] flex items-center justify-center px-4 sm:px-6 py-12 overflow-hidden">
       {/* ─── 3D AMBIENT LIGHTING & FLOATING ORBS ─── */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-blue-500/15 via-indigo-500/10 to-violet-500/15 rounded-full blur-3xl pointer-events-none animate-orb-1" />
       <div className="absolute bottom-10 left-1/4 w-[400px] h-[400px] bg-cyan-400/10 rounded-full blur-3xl pointer-events-none animate-orb-2" />
-      <div className="absolute top-1/3 right-1/4 w-[450px] h-[450px] bg-violet-500/10 rounded-full blur-3xl pointer-events-none animate-orb-1" />
 
       {/* 3D Perspective Grid Floor Overlay */}
       <div className="absolute inset-0 bg-grid-perspective opacity-60 pointer-events-none" />
 
       {/* ─── MAIN 3D GLASS CONTAINER ─── */}
-      <div className="relative z-10 w-full max-w-xl perspective-1000">
+      <div className="relative z-10 w-full max-w-lg perspective-1000">
         <div className="card-3d rounded-[2.5rem] p-8 sm:p-12 text-center space-y-8 animate-float-3d relative overflow-hidden">
           {/* Top Edge Specular Reflection Shimmer */}
           <div className="absolute -top-24 left-0 right-0 h-48 bg-gradient-to-b from-white/60 to-transparent pointer-events-none rounded-t-[2.5rem]" />
@@ -113,7 +104,7 @@ export default function Login() {
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-200/60 shadow-xs backdrop-blur-md">
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-[10px] font-bold text-primary tracking-wider uppercase">
-                  Firebase OAuth 2.0 & Multi-Tenant RBAC
+                  Firebase OAuth 2.0 & Role Selection
                 </span>
               </div>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -123,80 +114,70 @@ export default function Login() {
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-                Autonomous Commerce Readiness & Policy Engine for AI Agents
+                Select your account role below, then sign in with Google or switch instantly:
               </p>
             </div>
           </div>
 
-          {/* ─── 3D INTERACTIVE ROLE CAPABILITIES ─── */}
-          <div className="grid grid-cols-3 gap-3 text-left">
+          {/* ─── 3D ROLE SELECTOR (Buyer vs Merchant) ─── */}
+          <div className="grid grid-cols-2 gap-3.5 text-left">
             <button
               type="button"
-              onClick={() => setSelectedRolePreview('buyer')}
-              className={`p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer text-left space-y-1.5 relative overflow-hidden ${
-                selectedRolePreview === 'buyer'
-                  ? 'bg-gradient-to-b from-blue-50/90 to-indigo-50/50 border-blue-300/80 shadow-md shadow-blue-500/10 transform -translate-y-1'
-                  : 'bg-white/70 hover:bg-white border-slate-200/80 hover:border-slate-300 shadow-xs'
+              onClick={() => setSelectedRole('buyer')}
+              className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-left space-y-2 relative overflow-hidden ${
+                selectedRole === 'buyer'
+                  ? 'bg-gradient-to-b from-blue-500 to-indigo-600 text-white border-blue-400 shadow-lg shadow-blue-500/30 transform -translate-y-1 ring-2 ring-blue-300/60'
+                  : 'bg-white/70 hover:bg-white border-slate-200 text-slate-900 hover:border-slate-300 shadow-xs'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xl">🛍️</span>
-                {selectedRolePreview === 'buyer' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                <span className="text-2xl">🛍️</span>
+                {selectedRole === 'buyer' && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
                 )}
               </div>
-              <div className="text-xs font-bold text-slate-900">Buyer</div>
-              <div className="text-[10px] text-slate-500 leading-tight">Instant shop & AI negotiation</div>
+              <div>
+                <div className={`text-sm font-bold ${selectedRole === 'buyer' ? 'text-white' : 'text-slate-900'}`}>
+                  Buyer
+                </div>
+                <div className={`text-[11px] leading-tight ${selectedRole === 'buyer' ? 'text-blue-100' : 'text-slate-500'}`}>
+                  AI Shop, Discovery & Autonomous Checkout
+                </div>
+              </div>
             </button>
 
             <button
               type="button"
-              onClick={() => setSelectedRolePreview('merchant')}
-              className={`p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer text-left space-y-1.5 relative overflow-hidden ${
-                selectedRolePreview === 'merchant'
-                  ? 'bg-gradient-to-b from-emerald-50/90 to-teal-50/50 border-emerald-300/80 shadow-md shadow-emerald-500/10 transform -translate-y-1'
-                  : 'bg-white/70 hover:bg-white border-slate-200/80 hover:border-slate-300 shadow-xs'
+              onClick={() => setSelectedRole('merchant')}
+              className={`p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-left space-y-2 relative overflow-hidden ${
+                selectedRole === 'merchant'
+                  ? 'bg-gradient-to-b from-emerald-500 to-teal-600 text-white border-emerald-400 shadow-lg shadow-emerald-500/30 transform -translate-y-1 ring-2 ring-emerald-300/60'
+                  : 'bg-white/70 hover:bg-white border-slate-200 text-slate-900 hover:border-slate-300 shadow-xs'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xl">🏬</span>
-                {selectedRolePreview === 'merchant' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                <span className="text-2xl">🏬</span>
+                {selectedRole === 'merchant' && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
                 )}
               </div>
-              <div className="text-xs font-bold text-slate-900">Merchant</div>
-              <div className="text-[10px] text-slate-500 leading-tight">Policy rules & growth engine</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedRolePreview('admin')}
-              className={`p-3.5 rounded-2xl border transition-all duration-300 cursor-pointer text-left space-y-1.5 relative overflow-hidden ${
-                selectedRolePreview === 'admin'
-                  ? 'bg-gradient-to-b from-purple-50/90 to-pink-50/50 border-purple-300/80 shadow-md shadow-purple-500/10 transform -translate-y-1'
-                  : 'bg-white/70 hover:bg-white border-slate-200/80 hover:border-slate-300 shadow-xs'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xl">🛡️</span>
-                {selectedRolePreview === 'admin' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                )}
+              <div>
+                <div className={`text-sm font-bold ${selectedRole === 'merchant' ? 'text-white' : 'text-slate-900'}`}>
+                  Merchant & Admin
+                </div>
+                <div className={`text-[11px] leading-tight ${selectedRole === 'merchant' ? 'text-emerald-100' : 'text-slate-500'}`}>
+                  Policy Rules, Approvals & All Audit Logs
+                </div>
               </div>
-              <div className="text-xs font-bold text-slate-900">Admin</div>
-              <div className="text-[10px] text-slate-500 leading-tight">Approvals & live audit log</div>
             </button>
           </div>
 
-          {/* Configuration Hint Alert if Google Auth Not Enabled in Console */}
+          {/* Configuration Hint Alert if Google Auth Not Enabled */}
           {configError && (
             <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-left text-xs space-y-2.5 animate-fadeIn">
               <div className="font-bold text-amber-900 flex items-center gap-1.5">
-                <span>⚠️</span> 1-Step Setup: Enable Google Provider in Firebase
+                <span>⚠️</span> Enable Google Provider in Firebase Console
               </div>
-              <p className="text-amber-800 leading-relaxed text-[11px]">
-                Firebase requires you to activate the Google Sign-in provider once in your project console:
-              </p>
               <div className="pt-1">
                 <a
                   href="https://console.firebase.google.com/u/0/project/agent-ray/authentication"
@@ -204,12 +185,9 @@ export default function Login() {
                   rel="noreferrer"
                   className="btn-3d-primary inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md cursor-pointer"
                 >
-                  <span>Open Firebase Authentication Page ↗</span>
+                  <span>Open Firebase Console ↗</span>
                 </a>
               </div>
-              <p className="text-amber-800 text-[10px] pt-1">
-                Click <strong>"Get Started"</strong> → click <strong>Google</strong> → toggle <strong>Enable</strong> → click <strong>Save</strong>.
-              </p>
             </div>
           )}
 
@@ -245,77 +223,40 @@ export default function Login() {
                 </div>
               )}
               <span className="tracking-tight">
-                {signingIn ? 'Connecting to Google...' : 'Sign in with Google'}
+                {signingIn
+                  ? 'Signing in...'
+                  : `Sign in with Google as ${selectedRole.toUpperCase()}`}
               </span>
             </button>
 
-            {/* ─── 1-CLICK INSTANT DEMO ROLES (FOR FAST TESTING) ─── */}
+            {/* ─── 1-CLICK INSTANT ROLES (FAST EVALUATION) ─── */}
             <div className="pt-3 border-t border-slate-200/60 space-y-2.5">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <span>Instant Evaluation Roles</span>
-                <span className="text-[10px] text-primary">1-Click Fast Switch</span>
+                <span>Instant 1-Click Role Switch</span>
+                <span className="text-[10px] text-primary">Zero Auth Required</span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => handleDemoSignIn('buyer')}
                   disabled={signingIn}
-                  className="px-3 py-2 rounded-xl bg-blue-50/80 hover:bg-blue-100/90 text-blue-700 text-xs font-bold border border-blue-200/60 transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
+                  className="px-4 py-2.5 rounded-xl bg-blue-50/80 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200/60 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <span>🛍️</span>
-                  <span>Buyer</span>
+                  <span>Buyer Persona</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDemoSignIn('merchant')}
                   disabled={signingIn}
-                  className="px-3 py-2 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/90 text-emerald-700 text-xs font-bold border border-emerald-200/60 transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-50/80 hover:bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200/60 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs hover:-translate-y-0.5 active:translate-y-0"
                 >
                   <span>🏬</span>
-                  <span>Merchant</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDemoSignIn('admin')}
-                  disabled={signingIn}
-                  className="px-3 py-2 rounded-xl bg-purple-50/80 hover:bg-purple-100/90 text-purple-700 text-xs font-bold border border-purple-200/60 transition-all cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
-                >
-                  <span>🛡️</span>
-                  <span>Admin</span>
+                  <span>Merchant & Admin Persona</span>
                 </button>
               </div>
-            </div>
-
-            {/* Micro Badges Footer */}
-            <div className="pt-2 flex items-center justify-center gap-4 text-[11px] text-slate-400">
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Razorpay Test API
-              </span>
-              <span>·</span>
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Deterministic Policy
-              </span>
-              <span>·</span>
-              <Link to="/shop" className="text-primary hover:underline font-semibold">
-                Explore Marketplace →
-              </Link>
             </div>
           </div>
         </div>

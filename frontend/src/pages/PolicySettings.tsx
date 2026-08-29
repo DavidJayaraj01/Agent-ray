@@ -21,12 +21,15 @@ export default function PolicySettings() {
 
   const updateMut = useMutation({
     mutationFn: (data: any) => updatePolicy(merchantId, data),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['policy', merchantId], updated);
       queryClient.invalidateQueries({ queryKey: ['policy', merchantId] });
-      addToast('Policy updated successfully', 'success');
+      setForm(updated);
+      addToast('Policy updated successfully! Guardrails saved.', 'success');
     },
-    onError: () => addToast('Failed to update policy', 'error'),
+    onError: (err: any) => addToast(err?.response?.data?.detail || 'Failed to update policy', 'error'),
   });
+
 
   if (isLoading) return <Spinner />;
   if (!currentPolicy) return null;
@@ -37,7 +40,8 @@ export default function PolicySettings() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-10 animate-fadeIn">
+
       <div className="flex items-center gap-2 text-xs sm:text-sm text-text-secondary mb-4 sm:mb-6 flex-wrap">
         <Link to="/" className="hover:text-primary transition-colors">Merchants</Link>
         <span>/</span>

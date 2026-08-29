@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation, useParams, Link } from 'react-router-dom';
+import { Navigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore, type UserRole } from '../stores/authStore';
 
 interface RequireAuthProps {
@@ -29,16 +29,13 @@ export function RequireAuth({ children }: RequireAuthProps) {
 interface RequireRoleProps {
   role: UserRole | UserRole[];
   children: React.ReactNode;
-  checkMerchantOwnership?: boolean;
 }
 
 export function RequireRole({
   role,
   children,
-  checkMerchantOwnership = false,
 }: RequireRoleProps) {
   const { user, loading, initialized } = useAuthStore();
-  const { id } = useParams<{ id: string }>();
 
   if (loading || !initialized) {
     return (
@@ -53,22 +50,16 @@ export function RequireRole({
     return <Navigate to="/login" replace />;
   }
 
-  // Admin has global bypass
-  if (user.role === 'admin') {
+  // Merchant has full access to merchant sections
+  if (user.role === 'merchant') {
     return <>{children}</>;
   }
 
   const allowedRoles = Array.isArray(role) ? role : [role];
   const hasRole = allowedRoles.includes(user.role);
 
-  // If merchant ownership check is enabled, verify user.merchantId === URL param id
-  const hasOwnership =
-    !checkMerchantOwnership ||
-    !id ||
-    (user.merchantId !== null && user.merchantId !== undefined && String(user.merchantId) === String(id));
-
-  if (!hasRole || !hasOwnership) {
-    return <AccessDenied currentRole={user.role} requiredRole={role} isOwnershipMismatch={!hasOwnership} />;
+  if (!hasRole) {
+    return <AccessDenied currentRole={user.role} requiredRole={role} />;
   }
 
   return <>{children}</>;
@@ -77,11 +68,9 @@ export function RequireRole({
 function AccessDenied({
   currentRole,
   requiredRole,
-  isOwnershipMismatch,
 }: {
   currentRole: string;
   requiredRole: UserRole | UserRole[];
-  isOwnershipMismatch?: boolean;
 }) {
   const roleDisplay = Array.isArray(requiredRole) ? requiredRole.join(' or ') : requiredRole;
 
@@ -94,9 +83,7 @@ function AccessDenied({
       <div className="space-y-2">
         <h2 className="text-xl font-bold text-text">Access Restricted</h2>
         <p className="text-xs text-text-secondary max-w-md mx-auto">
-          {isOwnershipMismatch
-            ? 'You are not authorized to view or manage another merchant’s store.'
-            : `This section requires a ${roleDisplay} account. You are currently authenticated as a ${currentRole}.`}
+          This section requires a {roleDisplay} account. You are currently authenticated as a {currentRole}.
         </p>
       </div>
 
@@ -117,20 +104,22 @@ function AccessDenied({
 
       <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
         {currentRole === 'buyer' && (
-          <Link
-            to="/merchant/apply"
-            className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-full shadow-xs transition-colors"
+          <button
+            onClick={() => useAuthStore.getState().switchRole('merchant')}
+            className="btn-3d-primary w-full sm:w-auto px-6 py-2.5 text-white text-xs font-bold rounded-full shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
           >
-            Apply for Merchant Access ✨
-          </Link>
+            <span>⚡</span>
+            <span>Switch to Merchant Mode</span>
+          </button>
         )}
         <Link
           to="/shop"
-          className="w-full sm:w-auto px-5 py-2.5 bg-surface-alt hover:bg-surface text-text text-xs font-semibold rounded-full border border-border transition-colors"
+          className="w-full sm:w-auto px-5 py-2.5 bg-surface-alt hover:bg-surface text-text text-xs font-semibold rounded-full border border-border transition-colors text-center"
         >
-          Return to Marketplace
+          Return to AI Shop
         </Link>
       </div>
     </div>
   );
 }
+
