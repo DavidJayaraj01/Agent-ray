@@ -30,6 +30,7 @@ from backend.routers import (
     merchants, manifest, trust, intent,
     match, negotiate, policy, orders,
     audit, dashboard, firebase,
+    voice, growth, export, certificate, ws_negotiate,
 )
 
 
@@ -83,6 +84,11 @@ app.include_router(orders.router)
 app.include_router(audit.router)
 app.include_router(dashboard.router)
 app.include_router(firebase.router)
+app.include_router(voice.router)
+app.include_router(growth.router)
+app.include_router(export.router)
+app.include_router(certificate.router)
+app.include_router(ws_negotiate.router)
 
 
 @app.get("/")

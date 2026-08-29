@@ -43,6 +43,20 @@ export default function MerchantDashboard() {
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <Link
+            to={`/merchant/${merchantId}/growth`}
+            className="px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs flex items-center gap-1.5"
+          >
+            <span>🚀</span>
+            <span>AI Growth Engine</span>
+          </Link>
+          <Link
+            to={`/merchant/${merchantId}/certificate`}
+            className="px-3.5 py-2 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors shadow-2xs flex items-center gap-1.5"
+          >
+            <span>🏆</span>
+            <span>Agent-Ready Certificate</span>
+          </Link>
+          <Link
             to={`/merchant/${merchantId}/manifest`}
             className="px-3.5 py-2 text-xs font-medium text-text-secondary hover:text-text bg-white hover:bg-surface-alt border border-border rounded-xl transition-colors shadow-2xs"
           >
@@ -155,6 +169,45 @@ export default function MerchantDashboard() {
                 <p className="text-xs text-text-secondary">No transaction logs recorded</p>
               )}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Protocol Export & Standards Section */}
+      <div className="mt-6 sm:mt-8 bg-white rounded-2xl border border-border shadow-xs p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+                🌐 Protocol Interoperability & Ecosystem Exports
+              </span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                UAP / ACP / x402 Ready
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary">
+              Export this merchant's standardized catalog into open agent commerce formats for autonomous buyer discovery.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            <a
+              href={`/api/export/acp/${merchantId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <span>📦</span>
+              <span>Export ACP Envelope (JSON)</span>
+            </a>
+            <a
+              href={`/api/export/schema-org/${merchantId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 text-xs font-semibold text-text-secondary bg-surface-alt hover:bg-zinc-200 rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <span>🏷️</span>
+              <span>schema.org/Product (JSON-LD)</span>
+            </a>
           </div>
         </div>
       </div>

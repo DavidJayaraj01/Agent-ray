@@ -32,12 +32,28 @@ export default function Receipt() {
         </div>
 
         <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
-          {/* User Intent */}
+          {/* User Intent & Upsell Details */}
           {order.buyer_intent && (
-            <div>
-              <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">Buyer Intent</h3>
-              <div className="bg-surface-alt rounded-xl p-3.5 sm:p-4">
-                <p className="text-xs sm:text-sm text-text italic">"{order.buyer_intent}"</p>
+            <div className="space-y-3">
+              {order.buyer_intent.includes('Cross-Sell Bundle') && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🚀</span>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-900">AI Growth Cross-Sell Bundle Included</p>
+                      <p className="text-[11px] text-emerald-700">{order.buyer_intent.split('Cross-Sell Bundle:')[1]?.trim()}</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full uppercase">
+                    Upsell Unlocked
+                  </span>
+                </div>
+              )}
+              <div>
+                <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">Buyer Intent</h3>
+                <div className="bg-surface-alt rounded-xl p-3.5 sm:p-4">
+                  <p className="text-xs sm:text-sm text-text italic">"{order.buyer_intent}"</p>
+                </div>
               </div>
             </div>
           )}

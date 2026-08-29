@@ -27,6 +27,8 @@ export const matchProducts = (constraints: any, intentId?: number) =>
 // ─── Negotiate ─────────────────────────────────────────────
 export const negotiate = (data: { product_id: number; proposed_price: number; buyer_message?: string }) =>
   api.post('/negotiate', data).then(r => r.data);
+export const counterNegotiate = (negotiationId: number, data: { proposed_price?: number; buyer_message?: string; action?: string }) =>
+  api.post(`/negotiate/counter/${negotiationId}`, data).then(r => r.data);
 
 // ─── Policy ────────────────────────────────────────────────
 export const checkPolicy = (data: { product_id: number; proposed_price: number; merchant_id: number }) =>

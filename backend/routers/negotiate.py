@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import Product, Merchant, Negotiation
-from backend.schemas import NegotiateRequest, NegotiateResponse
+from backend.schemas import NegotiateRequest, NegotiateResponse, CounterOfferRequest
 from backend.services.llm_service import generate_negotiation_response
-from backend.services.policy_engine import validate_offer
+from backend.services.policy_engine import validate_offer, check_negotiation_rate, check_anomaly_pattern
 from backend.services.audit_service import log_event
 
 router = APIRouter(prefix="/api", tags=["negotiate"])
@@ -23,6 +23,32 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Merchant not found")
 
     policy_rules = merchant.policy_rules or {}
+
+    # ABUSE GUARD: Rate limit check
+    rate_check = check_negotiation_rate(data.product_id)
+    if not rate_check["approved"]:
+        log_event(
+            db, actor="policy", action="negotiation_rate_limited",
+            merchant_id=merchant.id,
+            input_data={"product_id": data.product_id, "proposed_price": data.proposed_price},
+            output_data=rate_check,
+            decision="blocked",
+            reason=rate_check["reason"],
+        )
+        raise HTTPException(status_code=429, detail=rate_check["reason"])
+
+    # ABUSE GUARD: Anomaly pattern check
+    anomaly_check = check_anomaly_pattern(data.proposed_price, product.price)
+    if not anomaly_check["approved"]:
+        log_event(
+            db, actor="policy", action="negotiation_anomaly_detected",
+            merchant_id=merchant.id,
+            input_data={"product_id": data.product_id, "proposed_price": data.proposed_price},
+            output_data=anomaly_check,
+            decision="blocked",
+            reason=anomaly_check["reason"],
+        )
+        raise HTTPException(status_code=403, detail=anomaly_check["reason"])
 
     # Step 1: LLM generates negotiation response (proposal only, no money action)
     llm_response = generate_negotiation_response(
@@ -53,6 +79,13 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         status = "rejected"
         final_price = None
         policy_reason = "Merchant declined the offer"
+    elif recommended_action == "counter":
+        if round(counter_price, 2) == round(data.proposed_price, 2):
+            status = "accepted"
+            policy_reason = policy_result["reason"]
+        else:
+            status = "counter"
+            policy_reason = f"Merchant countered with ₹{counter_price:,.0f}. {policy_result['reason']}"
     else:
         status = "accepted"
         policy_reason = policy_result["reason"]
@@ -122,3 +155,111 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         pass
 
     return negotiation
+
+
+@router.post("/negotiate/counter/{negotiation_id}", response_model=NegotiateResponse)
+def counter_negotiation(
+    negotiation_id: int,
+    data: CounterOfferRequest,
+    db: Session = Depends(get_db)
+):
+    """Second-round negotiation endpoint: buyer can accept, decline, or make a counter-offer."""
+    neg = db.query(Negotiation).filter(Negotiation.id == negotiation_id).first()
+    if not neg:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+
+    product = db.query(Product).filter(Product.id == neg.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    merchant = db.query(Merchant).filter(Merchant.id == neg.merchant_id).first()
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+
+    policy_rules = merchant.policy_rules or {}
+
+    # Handle buyer accepting merchant counter-offer
+    if data.action == "accept":
+        accepted_price = neg.final_price or neg.proposed_price
+        neg.status = "accepted"
+        transcript = list(neg.negotiation_transcript or [])
+        transcript.append({"role": "buyer", "message": f"I accept your counter-offer of ₹{accepted_price:,.0f}!"})
+        transcript.append({"role": "merchant_ai", "message": f"Deal confirmed at ₹{accepted_price:,.0f}! You can proceed to checkout."})
+        transcript.append({"role": "policy", "message": f"Approved: agreed at ₹{accepted_price:,.0f}", "status": "accepted"})
+        neg.negotiation_transcript = transcript
+        db.commit()
+        db.refresh(neg)
+        return neg
+
+    # Handle buyer declining
+    if data.action == "decline":
+        neg.status = "rejected"
+        transcript = list(neg.negotiation_transcript or [])
+        transcript.append({"role": "buyer", "message": "I decline this counter-offer."})
+        transcript.append({"role": "policy", "message": "Negotiation concluded without agreement.", "status": "rejected"})
+        neg.negotiation_transcript = transcript
+        db.commit()
+        db.refresh(neg)
+        return neg
+
+    # Round 2: Buyer submits counter-offer
+    proposed = data.proposed_price or (neg.final_price or product.price)
+
+    # Abuse guard checks
+    rate_check = check_negotiation_rate(product.id)
+    if not rate_check["approved"]:
+        raise HTTPException(status_code=429, detail=rate_check["reason"])
+
+    anomaly_check = check_anomaly_pattern(proposed, product.price)
+    if not anomaly_check["approved"]:
+        raise HTTPException(status_code=403, detail=anomaly_check["reason"])
+
+    # LLM evaluation
+    llm_resp = generate_negotiation_response(
+        product_name=product.name,
+        original_price=product.price,
+        proposed_price=proposed,
+        merchant_policy=policy_rules,
+        buyer_message=data.buyer_message,
+    )
+    counter_price = llm_resp.get("counter_price", proposed)
+    rec_action = llm_resp.get("recommended_action", "counter")
+    policy_result = validate_offer(product.price, counter_price, policy_rules)
+
+    if not policy_result["approved"]:
+        status = "blocked"
+        reason = policy_result["reason"]
+        final_price = None
+    elif rec_action == "accept" or round(counter_price, 2) == round(proposed, 2):
+        status = "accepted"
+        final_price = counter_price
+        reason = policy_result["reason"]
+    else:
+        status = "accepted"
+        final_price = counter_price
+        reason = f"Final counter accepted at ₹{counter_price:,.0f}. {policy_result['reason']}"
+
+    transcript = list(neg.negotiation_transcript or [])
+    transcript.append({"role": "buyer", "message": data.buyer_message or f"Round 2 Counter: Can you do ₹{proposed:,.0f}?"})
+    transcript.append({"role": "merchant_ai", "message": llm_resp.get("message", "")})
+    transcript.append({"role": "policy", "message": reason, "status": status})
+
+    neg.proposed_price = proposed
+    neg.final_price = final_price
+    neg.status = status
+    neg.policy_reason = reason
+    neg.negotiation_transcript = transcript
+    neg.discount_percent = policy_result.get("discount_percent", 0.0)
+
+    log_event(
+        db, actor="llm", action="negotiation_round_2",
+        merchant_id=merchant.id,
+        input_data={"product_id": product.id, "proposed_price": proposed},
+        output_data={"counter_price": counter_price, "status": status},
+        decision="approved" if status == "accepted" else "blocked",
+        reason=reason,
+    )
+
+    db.commit()
+    db.refresh(neg)
+    return neg

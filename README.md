@@ -182,26 +182,55 @@ See ranked results with match percentages and "why this one" checklists.
 
 ### Step 5: Negotiate & Buy
 - Click **"Negotiate & Buy"** on any product
-- **Reasonable offer** (5% off) → ✅ accepted → proceed to Razorpay checkout
+- **Reasonable offer** (5-10% off) → ✅ accepted → proceed to checkout
 - **Excessive offer** (25% off) → 🚫 **BLOCKED** by policy engine → red card, no payment attempt
 
-### Step 6: Audit Everything
-Visit **"Audit"** → see every LLM decision and policy check with timestamps, filterable by merchant or status.
+### Step 6: AI Growth & Upsell Agent (Cross-Sell Engine)
+- When an offer is accepted, the **AI Growth Agent** presents a smart, category-aware **"Frequently Bought Together"** bundle (e.g., MagSafe Armor Case + 25W Charger for phones, Anti-Blister Socks for shoes).
+- 1-click **"Add to Order"** seamlessly expands the cart with an exclusive bundle discount, verified by the policy engine and reflected on the Razorpay checkout total.
+
+### Step 7: AI Growth Agent & GMV Optimization
+Visit **"Merchant Dashboard" → "AI Growth Engine"** (`/merchant/:id/growth`):
+- Proactive cross-sell analysis with attach rates (e.g., 68% attach rate for phone + audio bundle).
+- Statistical category pricing outlier detection using standard deviation z-scores.
+- Policy-gated abandoned-cart recovery nudges.
+- 90-day GMV simulation: baseline organic vs agent-assisted projected revenue with weekly chart comparisons.
+
+### Step 8: Multi-Lingual Voice Commerce with Sarvam AI
+Visit **"Voice AI"** (`/voice`):
+- Speak natural intent in 11 Indian languages (Hindi, Tamil, Telugu, Kannada, Bengali, etc.).
+- Audio transcribed with Sarvam AI **Saaras v3**, parsed through local LLM / intent engine.
+- Matching products surfaced immediately and spoken back with Sarvam AI **Bulbul v3** text-to-speech.
+
+### Step 9: Live WebSocket & Multi-Round Counter Negotiation
+Visit **"AI Shop" → "Negotiate"**:
+- Real-time streaming negotiation transcript powered by WebSockets (`/ws/negotiate/{id}`).
+- Watch buyer agent proposals, AI deliberation, and policy gate checks stream live.
+- **Round 2 Counter-Offers**: If the merchant AI counters, the buyer can accept the counter, propose a round 2 revision, or decline.
+
+### Step 10: Protocol Interoperability & Public Certificate
+- **ACP Envelope**: Export normalized catalogs into Agent Commerce Protocol (ACP v0.1) format at `/api/export/acp/{id}`.
+- **schema.org/Product**: Machine-readable JSON-LD export at `/api/export/schema-org/{id}`.
+- **Shareable Certificate**: Public badge page at `/merchant/:id/certificate` featuring animated trust score ring, verification SHA-256 hash, and tier badges.
+
+### Step 11: Audit Everything
+Visit **"Audit"** → see every LLM decision, bundle expansion, and policy check with timestamps, synced live to Firebase Firestore.
 
 ---
 
-## 🛡️ Safety Rules
+## 🛡️ Safety & Abuse Guard Rules
 
-1. **LLM NEVER directly creates orders** — all money flows through the policy engine
-2. **Policy engine is pure Python** — deterministic, no LLM, 22 unit tests
-3. **Audit log is append-only** — writes BEFORE any user-facing response
-4. **Live Razorpay keys are REJECTED** at startup (only `rzp_test_*` accepted)
-5. **Explicit failure test** — discounts exceeding `max_discount` are blocked before reaching Razorpay
+1. **LLM NEVER directly creates orders** — all money flows through the deterministic policy engine
+2. **Policy engine is pure Python** — deterministic, no LLM, 34 unit tests
+3. **Abuse & Anomaly Guard** — enforces rate-limiting (max 5 negotiation attempts per 10 minutes) and flags aggressive >50% discount anomalies
+4. **Audit log is append-only** — writes BEFORE any user-facing response
+5. **Live Razorpay keys are REJECTED** at startup (only `rzp_test_*` accepted)
+6. **Explicit failure test** — discounts exceeding `max_discount` are blocked before reaching Razorpay
 
-### Run Safety Tests
+### Run Safety & Abuse Guard Tests
 ```bash
 python -m pytest backend/tests/test_policy_engine.py -v
-# 22 tests, all passing ✅
+# 34 tests, all passing ✅
 ```
 
 ---

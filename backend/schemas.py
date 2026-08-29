@@ -109,6 +109,12 @@ class NegotiateRequest(BaseModel):
     buyer_message: str = ""
 
 
+class CounterOfferRequest(BaseModel):
+    proposed_price: Optional[float] = None
+    buyer_message: str = ""
+    action: str = "offer"  # "offer", "accept", "decline"
+
+
 class NegotiateResponse(BaseModel):
     id: int
     product_id: int

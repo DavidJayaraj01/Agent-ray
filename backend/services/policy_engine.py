@@ -14,6 +14,75 @@ class PolicyViolation(Exception):
         super().__init__(reason)
 
 
+# ── Abuse / Anomaly Guard ───────────────────────────────────
+
+import time as _time
+
+# In-memory rate tracker (product_id -> list of timestamps)
+_rate_tracker: dict[str, list[float]] = {}
+
+
+def check_negotiation_rate(
+    product_id: int,
+    window_minutes: int = 10,
+    max_attempts: int = 5,
+) -> dict:
+    """Rate-limit negotiations on the same product.
+
+    Blocks buyer agents making more than max_attempts negotiations
+    on the same product within the time window.
+    """
+    key = f"negotiate_{product_id}"
+    now = _time.time()
+    window_seconds = window_minutes * 60
+
+    if key not in _rate_tracker:
+        _rate_tracker[key] = []
+
+    # Evict stale entries
+    _rate_tracker[key] = [t for t in _rate_tracker[key] if now - t < window_seconds]
+
+    if len(_rate_tracker[key]) >= max_attempts:
+        return {
+            "approved": False,
+            "reason": (
+                f"Rate limit exceeded: {max_attempts} negotiation attempts "
+                f"on product #{product_id} in the last {window_minutes} minutes. "
+                f"This may indicate automated abuse. Please wait and try again."
+            ),
+            "attempts": len(_rate_tracker[key]),
+            "window_minutes": window_minutes,
+        }
+
+    _rate_tracker[key].append(now)
+    return {"approved": True, "attempts": len(_rate_tracker[key])}
+
+
+def check_anomaly_pattern(proposed_price: float, original_price: float) -> dict:
+    """Flag suspiciously aggressive offers as potential abuse.
+
+    Offers requesting >50% discount are flagged as anomalous.
+    """
+    if original_price <= 0:
+        return {"approved": True, "anomaly": False}
+
+    discount_pct = ((original_price - proposed_price) / original_price) * 100
+
+    if discount_pct > 50:
+        return {
+            "approved": False,
+            "anomaly": True,
+            "reason": (
+                f"Anomaly detected: {discount_pct:.1f}% discount request is "
+                f"suspiciously aggressive (threshold: 50%). This offer has been "
+                f"flagged for potential automated abuse."
+            ),
+            "discount_pct": round(discount_pct, 1),
+        }
+
+    return {"approved": True, "anomaly": False, "discount_pct": round(discount_pct, 1)}
+
+
 def check_discount(
     original_price: float,
     proposed_price: float,

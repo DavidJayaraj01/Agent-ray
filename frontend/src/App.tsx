@@ -13,6 +13,9 @@ import BuyerSearch from './pages/BuyerSearch';
 import NegotiationCheckout from './pages/NegotiationCheckout';
 import Receipt from './pages/Receipt';
 import AuditLog from './pages/AuditLog';
+import VoiceAssistant from './pages/VoiceAssistant';
+import GrowthDashboard from './pages/GrowthDashboard';
+import AgentReadyCertificate from './pages/AgentReadyCertificate';
 
 function FloatingNavbar() {
   const location = useLocation();
@@ -34,6 +37,7 @@ function FloatingNavbar() {
   const navLinks = [
     { path: '/', label: 'Marketplace' },
     { path: '/shop', label: 'AI Shop' },
+    { path: '/voice', label: '🎙️ Voice AI' },
     { path: '/merchant/new', label: 'List Store' },
     { path: '/admin/audit', label: 'Audit Trail' },
   ];
@@ -197,6 +201,9 @@ export default function App() {
           <Route path="/shop/negotiate/:productId" element={<NegotiationCheckout />} />
           <Route path="/shop/receipt/:orderId" element={<Receipt />} />
           <Route path="/admin/audit" element={<AuditLog />} />
+          <Route path="/voice" element={<VoiceAssistant />} />
+          <Route path="/merchant/:id/growth" element={<GrowthDashboard />} />
+          <Route path="/merchant/:id/certificate" element={<AgentReadyCertificate />} />
         </Routes>
       </main>
 

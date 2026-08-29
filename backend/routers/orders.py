@@ -30,17 +30,47 @@ def create_order(data: OrderCreateRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Merchant not found")
 
     # SAFETY: Re-validate policy BEFORE any payment call
-    policy_result = validate_offer(product.price, data.amount, merchant.policy_rules or {})
-    if not policy_result["approved"]:
+    rules = merchant.policy_rules or {}
+    max_auto_order = rules.get("max_auto_order", 250000)
+    min_price = rules.get("min_price", 0)
+
+    if data.amount > max_auto_order:
+        reason = f"Order amount ₹{data.amount:.2f} exceeds merchant's maximum auto-order limit of ₹{max_auto_order:.2f}"
         log_event(
             db, actor="policy", action="order_blocked",
             merchant_id=merchant.id,
             input_data={"product_id": data.product_id, "amount": data.amount},
-            output_data=policy_result,
+            output_data={"approved": False, "reason": reason},
             decision="blocked",
-            reason=policy_result["reason"],
+            reason=reason,
         )
-        raise HTTPException(status_code=403, detail=policy_result["reason"])
+        raise HTTPException(status_code=403, detail=reason)
+
+    if data.amount < min_price:
+        reason = f"Order amount ₹{data.amount:.2f} is below merchant's minimum price of ₹{min_price:.2f}"
+        log_event(
+            db, actor="policy", action="order_blocked",
+            merchant_id=merchant.id,
+            input_data={"product_id": data.product_id, "amount": data.amount},
+            output_data={"approved": False, "reason": reason},
+            decision="blocked",
+            reason=reason,
+        )
+        raise HTTPException(status_code=403, detail=reason)
+
+    # For standalone single-item discounts, validate max_discount limit
+    if data.amount <= product.price:
+        policy_result = validate_offer(product.price, data.amount, rules)
+        if not policy_result["approved"]:
+            log_event(
+                db, actor="policy", action="order_blocked",
+                merchant_id=merchant.id,
+                input_data={"product_id": data.product_id, "amount": data.amount},
+                output_data=policy_result,
+                decision="blocked",
+                reason=policy_result["reason"],
+            )
+            raise HTTPException(status_code=403, detail=policy_result["reason"])
 
     # Create Razorpay order
     razorpay_order_id = ""

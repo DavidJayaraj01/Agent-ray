@@ -13,6 +13,9 @@ from backend.services.policy_engine import (
     check_min_price,
     check_order_amount,
     check_negotiation_enabled,
+    check_negotiation_rate,
+    check_anomaly_pattern,
+    _rate_tracker,
 )
 
 
@@ -176,3 +179,64 @@ class TestBlockedOfferNeverReachesOrder:
             order_created = True  # This line should NEVER execute
 
         assert order_created is False, "Order was created despite policy rejection!"
+
+
+# ─── Rate limiting tests ────────────────────────────────────
+class TestRateLimiting:
+    def setup_method(self):
+        """Clear rate tracker before each test."""
+        _rate_tracker.clear()
+
+    def test_first_attempt_allowed(self):
+        result = check_negotiation_rate(product_id=999, max_attempts=5)
+        assert result["approved"] is True
+
+    def test_within_limit_allowed(self):
+        for _ in range(4):
+            check_negotiation_rate(product_id=998, max_attempts=5)
+        result = check_negotiation_rate(product_id=998, max_attempts=5)
+        assert result["approved"] is True
+
+    def test_exceeds_limit_blocked(self):
+        for _ in range(5):
+            check_negotiation_rate(product_id=997, max_attempts=5)
+        result = check_negotiation_rate(product_id=997, max_attempts=5)
+        assert result["approved"] is False
+        assert "Rate limit exceeded" in result["reason"]
+
+    def test_different_products_independent(self):
+        for _ in range(5):
+            check_negotiation_rate(product_id=996, max_attempts=5)
+        # Product 996 should be blocked
+        result_996 = check_negotiation_rate(product_id=996, max_attempts=5)
+        assert result_996["approved"] is False
+        # Product 995 should still be fine
+        result_995 = check_negotiation_rate(product_id=995, max_attempts=5)
+        assert result_995["approved"] is True
+
+
+# ─── Anomaly detection tests ────────────────────────────────
+class TestAnomalyDetection:
+    def test_normal_discount_not_flagged(self):
+        result = check_anomaly_pattern(proposed_price=900, original_price=1000)
+        assert result["approved"] is True
+        assert result["anomaly"] is False
+
+    def test_aggressive_discount_flagged(self):
+        result = check_anomaly_pattern(proposed_price=400, original_price=1000)
+        assert result["approved"] is False
+        assert result["anomaly"] is True
+        assert "Anomaly detected" in result["reason"]
+
+    def test_50_percent_boundary_allowed(self):
+        result = check_anomaly_pattern(proposed_price=500, original_price=1000)
+        assert result["approved"] is True
+
+    def test_zero_price_flagged(self):
+        result = check_anomaly_pattern(proposed_price=0, original_price=1000)
+        assert result["approved"] is False
+        assert result["anomaly"] is True
+
+    def test_zero_original_price_safe(self):
+        result = check_anomaly_pattern(proposed_price=100, original_price=0)
+        assert result["approved"] is True
