@@ -203,12 +203,18 @@ def _parse_intent_rule_based(raw_text: str) -> dict:
         constraints["category"] = "Smartphones"
         constraints["keywords"].append("iphone")
         constraints["brand"] = "Apple"
+    elif re.search(r'\b(?:galaxy|s\d+|pixel|oneplus|redmi|realme|xiaomi|vivo|oppo|smartphone|smartphones|mobile|mobiles|phone|phones)\b', text):
+        constraints["category"] = "Smartphones"
+        if "galaxy" in text or re.search(r'\bs\d+\b', text):
+            constraints["brand"] = "Samsung"
+        elif "pixel" in text:
+            constraints["brand"] = "Google"
+        elif "oneplus" in text:
+            constraints["brand"] = "OnePlus"
+        constraints["keywords"].append("phone")
     elif re.search(r'\b(?:headphone|headphones|earphone|earphones|earbuds|airpods)\b', text):
         constraints["category"] = "Audio"
         constraints["keywords"].append("headphones")
-    elif re.search(r'\b(?:phone|smartphone|mobile)\b', text):
-        constraints["category"] = "Smartphones"
-        constraints["keywords"].append("phone")
     elif re.search(r'\b(?:laptop|notebook|macbook)\b', text):
         constraints["category"] = "Laptops"
         constraints["keywords"].append("laptop")
@@ -259,13 +265,13 @@ def _parse_intent_rule_based(raw_text: str) -> dict:
     elif "today" in text:
         constraints["delivery_deadline"] = 0
 
-    # Extract remaining keywords
+    # Extract remaining keywords (including alphanumeric tokens like s26, s24, 5g, m2)
     stop_words = {"i", "need", "want", "looking", "for", "a", "an", "the", "me", "my", "some",
                   "please", "can", "get", "find", "show", "under", "below", "within", "arrive",
-                  "tomorrow", "today", "asap", "and", "or", "with", "in", "to", "of"}
-    words = re.findall(r'\b[a-z]+\b', text)
-    keywords = [w for w in words if w not in stop_words and len(w) > 2]
-    constraints["keywords"] = list(set(constraints["keywords"] + keywords[:5]))
+                  "tomorrow", "today", "asap", "and", "or", "with", "in", "to", "of", "buy"}
+    words = re.findall(r'\b[a-z0-9]+(?:-[a-z0-9]+)*\b', text)
+    keywords = [w for w in words if w not in stop_words and (len(w) > 2 or (len(w) >= 2 and any(c.isdigit() for c in w)))]
+    constraints["keywords"] = list(dict.fromkeys(constraints["keywords"] + keywords[:6]))
 
     return constraints
 

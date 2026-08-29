@@ -90,7 +90,7 @@ def _ensure_live_marketplace_products(db: Session, query: str, budget: float | N
                 raw_catalog_text="",
                 status="active",
                 trust_score=item.get("trust_score", 95.0),
-                policy_rules={"max_discount": 12, "min_price": 200, "max_auto_order": 50000, "negotiation_enabled": True},
+                policy_rules={"max_discount": 12, "min_price": 200, "max_auto_order": 250000, "negotiation_enabled": True},
             )
             db.add(merchant)
             db.flush()
@@ -102,7 +102,12 @@ def _ensure_live_marketplace_products(db: Session, query: str, budget: float | N
             Product.name == item["name"]
         ).first()
 
-        if not existing:
+        if existing:
+            # Update with fresh live pricing & variants
+            existing.price = item["price"]
+            if item.get("variants"):
+                existing.variants = item["variants"]
+        else:
             new_p = Product(
                 merchant_id=merchant.id,
                 name=item["name"],
@@ -148,7 +153,7 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
     delivery = constraints.get("delivery_deadline")
     keywords = [kw.lower() for kw in constraints.get("keywords", [])]
 
-    # Also extract words from raw_query
+    # Also extract words from raw_query (including alphanumeric tokens)
     if raw_query:
         query_words = [w.lower() for w in re.split(r'\s+', raw_query) if len(w) > 2 and w not in ["the", "for", "with", "under", "and", "buy", "show"]]
         for qw in query_words:
@@ -157,13 +162,28 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
 
     name_lower = product.name.lower()
     cat_lower = product.category.lower()
+    q_lower = raw_query.lower()
+
+    # ─── CROSS-CATEGORY MISMATCH GUARDS ───
+    is_phone_query = any(re.search(r'\b' + re.escape(w) + r'\b', q_lower) for w in ["s26", "s25", "s24", "s23", "phone", "smartphone", "galaxy", "iphone", "pixel", "oneplus"])
+    if is_phone_query and cat_lower in ["footwear", "shoes", "dresses", "sarees", "clothing"]:
+        return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not a phone/accessory)"}}
+
+    is_footwear_query = any(re.search(r'\b' + re.escape(w) + r'\b', q_lower) for w in ["shoe", "shoes", "sneaker", "sneakers", "footwear", "running shoes"])
+    if is_footwear_query and cat_lower in ["smartphones", "electronics", "audio", "tablets", "dresses", "sarees"]:
+        return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not footwear)"}}
+
+    # Helper for token matching with word boundaries on short keywords
+    def _kw_matches(kw: str, target: str) -> bool:
+        if len(kw) <= 5:
+            return bool(re.search(r'\b' + re.escape(kw) + r'\b', target))
+        return kw in target
 
     # ─── 1. KEYWORD & INTENT RELEVANCE (Highest Priority: 45 pts) ───
     if keywords:
-        matched_kw = [kw for kw in keywords if kw in name_lower or kw in cat_lower]
+        matched_kw = [kw for kw in keywords if _kw_matches(kw, name_lower) or _kw_matches(kw, cat_lower)]
         
         # Strict category & keyword exclusion rules:
-        # If user searched "dress", reject shoes, sarees, electronics, tablets
         if "dress" in keywords:
             if not ("dress" in name_lower or "gown" in name_lower or "dress" in cat_lower):
                 return 0, {"intent": {"match": False, "detail": "Not a dress"}}
@@ -177,11 +197,13 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
                 return 0, {"intent": {"match": False, "detail": "Not footwear"}}
 
         if any(kw in ["laptop", "tablet", "phone", "headphone", "audio", "earbuds"] for kw in keywords):
-            if not any(ew in name_lower or ew in cat_lower for ew in ["laptop", "tablet", "phone", "headphone", "audio", "earbuds", "buds"]):
+            if not any(ew in name_lower or ew in cat_lower for ew in ["laptop", "tablet", "phone", "headphone", "audio", "earbuds", "buds", "s26", "s25", "s24", "s23"]):
                 return 0, {"intent": {"match": False, "detail": "Not matching electronic item"}}
 
         if matched_kw:
-            score += 45
+            # Scale score based on proportion of matched keywords
+            match_ratio = len(matched_kw) / max(len(keywords), 1)
+            score += int(30 + 15 * match_ratio)
             reasons["keywords"] = {"match": True, "detail": f"Matched intent: {', '.join(matched_kw)}"}
         else:
             # If no keyword matched, product does not match search
@@ -193,7 +215,7 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
     # ─── 2. CATEGORY MATCH (25 pts) ───
     clothing_subcats = ["clothing", "dresses", "ethnic wear", "sarees", "western wear", "apparel", "traditional wear"]
     footwear_subcats = ["footwear", "shoes", "sneakers", "running shoes", "sports footwear"]
-    electronics_subcats = ["electronics", "audio", "tablets", "peripherals", "laptops", "gadgets"]
+    electronics_subcats = ["electronics", "audio", "tablets", "peripherals", "laptops", "gadgets", "smartphones", "accessories"]
 
     is_cat_match = False
     if category:

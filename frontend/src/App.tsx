@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from './stores/uiStore';
 import { fetchFirebaseStatus } from './api/client';
+import rayLogo from './assets/ray-logo.png';
 import Landing from './pages/Landing';
 import MerchantOnboarding from './pages/MerchantOnboarding';
 import ManifestReview from './pages/ManifestReview';
@@ -20,6 +21,7 @@ function FloatingNavbar() {
   
   // Automatically close mobile menu when route changes
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
@@ -42,10 +44,8 @@ function FloatingNavbar() {
         <nav className="rounded-2xl sm:rounded-full bg-white/95 backdrop-blur-md border border-border shadow-sm px-4 sm:px-6 py-2.5 flex items-center justify-between transition-all">
           {/* Brandmark */}
           <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-xs">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center shadow-xs bg-white border border-border/60 p-0.5">
+              <img src={rayLogo} alt="AgentReady Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col leading-none">
               <span className="font-semibold text-base text-text tracking-tight group-hover:text-primary transition-colors">

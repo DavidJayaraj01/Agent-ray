@@ -149,7 +149,8 @@ Without Ollama, the app uses intelligent rule-based fallbacks.
 ### 4. Frontend Setup & Start
 
 ```bash
-# From project root
+# Navigate to frontend directory
+cd frontend
 npm install
 npm run dev
 ```

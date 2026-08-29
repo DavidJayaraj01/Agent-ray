@@ -50,19 +50,19 @@ def seed_all(db: Session):
             "name": "Meesho Fashion Direct",
             "category": "Fashion & Ethnic Wear",
             "catalog": MEESHO_CATALOG,
-            "policy": {"max_discount": 12, "min_price": 300, "max_auto_order": 20000, "negotiation_enabled": True},
+            "policy": {"max_discount": 12, "min_price": 300, "max_auto_order": 50000, "negotiation_enabled": True},
         },
         {
             "name": "Amazon India Official Hub",
             "category": "Electronics & Lifestyle",
             "catalog": AMAZON_CATALOG,
-            "policy": {"max_discount": 8, "min_price": 500, "max_auto_order": 60000, "negotiation_enabled": True},
+            "policy": {"max_discount": 8, "min_price": 500, "max_auto_order": 250000, "negotiation_enabled": True},
         },
         {
             "name": "Flipkart SuperComNet Sports",
             "category": "Sports & Footwear",
             "catalog": FLIPKART_CATALOG,
-            "policy": {"max_discount": 15, "min_price": 500, "max_auto_order": 35000, "negotiation_enabled": True},
+            "policy": {"max_discount": 15, "min_price": 500, "max_auto_order": 250000, "negotiation_enabled": True},
         },
     ]
 
