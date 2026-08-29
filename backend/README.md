@@ -38,13 +38,35 @@ uvicorn backend.main:app --reload --port 8000
 | `POST` | `/api/intent` | Buyer NL text → structured constraints |
 | `POST` | `/api/match` | Constraints → ranked product matches with % score |
 
-### Negotiation & Policy
+### Negotiation & Policy (Real-time & Multi-round)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/negotiate` | LLM proposes offer (does NOT touch money) |
+| `POST` | `/api/negotiate` | LLM proposes offer gated by deterministic policy engine |
+| `POST` | `/api/negotiate/counter/{id}` | **Round 2 counter-offer** (accept / counter / decline) |
+| `WS` | `/ws/negotiate/{product_id}` | **WebSocket live streaming** negotiation transcript |
 | `POST` | `/api/policy/check` | **Deterministic** policy validation (pure Python) |
 | `GET` | `/api/policy/{merchant_id}` | Get merchant policy rules |
 | `PUT` | `/api/policy/{merchant_id}` | Update policy rules |
+
+### AI Growth Agent
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/growth/{merchant_id}` | Proactive cross-sell attach rates, pricing outliers ($z$-scores), cart-recovery nudges & 90-day GMV simulation |
+
+### Sarvam AI Multilingual Voice Assistant
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/voice/status` | Check Sarvam AI readiness, available languages & voices |
+| `POST` | `/api/voice/stt` | Speech-to-Text via Sarvam **Saaras v3** (11 Indian languages) |
+| `POST` | `/api/voice/tts` | Text-to-Speech via Sarvam **Bulbul v3** |
+| `POST` | `/api/voice/converse` | Full voice commerce pipeline: Audio → Intent → Product match → Spoken audio response |
+
+### Protocol Interoperability & Manifest Exports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/export/acp/{merchant_id}` | Export catalog in **Agent Commerce Protocol (ACP v0.1)** format |
+| `GET` | `/api/export/schema-org/{merchant_id}` | Export catalog in **schema.org/Product** JSON-LD format |
+| `GET` | `/api/merchant/{id}/certificate` | Public **Agent-Ready Certificate** with SHA-256 hash & trust tier |
 
 ### Orders (Razorpay)
 | Method | Endpoint | Description |
@@ -59,6 +81,8 @@ uvicorn backend.main:app --reload --port 8000
 | `GET` | `/api/audit` | All audit logs (filterable by merchant/status) |
 | `GET` | `/api/audit/{merchant_id}` | Merchant-specific audit logs |
 | `GET` | `/api/dashboard/{merchant_id}` | Dashboard analytics + trust breakdown |
+| `GET` | `/api/firebase/status` | Real-time Firebase RTDB sync health check |
+| `POST` | `/api/firebase/ping` | Test live ping to Firebase Realtime Database |
 
 ---
 
@@ -102,14 +126,28 @@ uvicorn backend.main:app --reload --port 8000
 
 ## Service Architecture
 
-### Policy Engine (`services/policy_engine.py`)
+### Policy Engine & Abuse Guard (`services/policy_engine.py`)
 **Pure Python, NO LLM** — the safety gate between proposals and payments.
 
 Checks:
 1. Discount within `max_discount` limit
 2. Price above `min_price` threshold
-3. Order below `max_auto_order` cap
+3. Order below `max_auto_order` cap (e.g. ₹2,50,000)
 4. Negotiation is enabled
+5. **Rate-Limiting Abuse Guard**: max 5 negotiation attempts per 10-minute window per product
+6. **Anomaly Detector**: automatically flags aggressive >50% discount demands as potential automated abuse
+
+### AI Growth Engine (`services/growth_engine.py`)
+Proactive revenue intelligence for merchants:
+- Category co-occurrence cross-sell opportunities with attach rates (e.g., 68% for smartphones + audio)
+- Standard deviation $z$-score category pricing outlier detection
+- Abandoned-cart recovery nudges (policy-gated)
+- 90-day GMV simulation (baseline organic vs. agent-assisted revenue uplift)
+
+### Sarvam AI Service (`services/sarvam_service.py`)
+- Speech-to-Text via **Saaras v3** (22 Indian languages, code-mixing & Hinglish support)
+- Text-to-Speech via **Bulbul v3** (voice models: kavya, aditya, shubh, priya, etc.)
+- Graceful degradation if API key is not present
 
 ### LLM Service (`services/llm_service.py`)
 Uses **Ollama** (local LLM) for:
@@ -131,12 +169,16 @@ Weighted score from 4 dimensions:
 ## Testing
 
 ```bash
-python -m pytest tests/test_policy_engine.py -v
-# 22 tests covering:
+python -m pytest backend/tests -v
+# 34 tests, all passing ✅:
 #   - Discount limits (within, at, exceeds)
 #   - Min price validation
 #   - Max order amount
 #   - Negotiation enabled/disabled
 #   - Full offer validation
 #   - Blocked offer never reaches order creation
+#   - Rate-limiting abuse guard (first attempt, limit boundary, exceeded, product isolation)
+#   - Anomaly detection (>50% discount demand, 0 price, normal discount)
+#   - Firebase RTDB sync & ping tests
 ```
+

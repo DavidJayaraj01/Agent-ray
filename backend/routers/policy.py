@@ -7,12 +7,17 @@ from backend.models import Product, Merchant
 from backend.schemas import PolicyCheckRequest, PolicyCheckResponse
 from backend.services.policy_engine import validate_offer
 from backend.services.audit_service import log_event
+from backend.services.auth_service import get_current_user, require_own_merchant, AuthUser
 
 router = APIRouter(prefix="/api", tags=["policy"])
 
 
 @router.post("/policy/check", response_model=PolicyCheckResponse)
-def check_policy(data: PolicyCheckRequest, db: Session = Depends(get_db)):
+def check_policy(
+    data: PolicyCheckRequest,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
     product = db.query(Product).filter(Product.id == data.product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -37,13 +42,20 @@ def check_policy(data: PolicyCheckRequest, db: Session = Depends(get_db)):
         output_data=result,
         decision="approved" if result["approved"] else "blocked",
         reason=result["reason"],
+        actor_uid=user.uid,
+        actor_email=user.email,
+        actor_role=user.role,
     )
 
     return PolicyCheckResponse(**result)
 
 
 @router.get("/policy/{merchant_id}")
-def get_policy(merchant_id: int, db: Session = Depends(get_db)):
+def get_policy(
+    merchant_id: int,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
+):
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
@@ -51,7 +63,12 @@ def get_policy(merchant_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/policy/{merchant_id}")
-def update_policy(merchant_id: int, policy: dict, db: Session = Depends(get_db)):
+def update_policy(
+    merchant_id: int,
+    policy: dict,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
+):
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
@@ -69,12 +86,15 @@ def update_policy(merchant_id: int, policy: dict, db: Session = Depends(get_db))
     db.refresh(merchant)
 
     log_event(
-        db, actor="system", action="policy_updated",
+        db, actor="merchant", action="policy_updated",
         merchant_id=merchant_id,
         input_data=policy,
         output_data=current,
         decision="info",
         reason="Merchant policy rules updated",
+        actor_uid=user.uid,
+        actor_email=user.email,
+        actor_role=user.role,
     )
 
     return current

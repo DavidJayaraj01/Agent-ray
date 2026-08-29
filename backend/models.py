@@ -81,6 +81,8 @@ class Negotiation(Base):
     status = Column(String(50), default="pending")  # pending, accepted, rejected, blocked
     policy_reason = Column(Text, default="")
     negotiation_transcript = Column(JSON, default=lambda: [])
+    buyer_uid = Column(String(128), default="")
+    buyer_email = Column(String(255), default="")
     created_at = Column(DateTime, default=utcnow)
 
 
@@ -96,9 +98,12 @@ class Order(Base):
     negotiation_id = Column(Integer, ForeignKey("negotiations.id"), nullable=True)
     amount = Column(Float, nullable=False)
     currency = Column(String(10), default="INR")
-    status = Column(String(50), default="created")  # created, paid, failed, refunded
+    status = Column(String(50), default="created")  # created, paid, failed, refunded, pending_approval
     buyer_intent = Column(Text, default="")
+    buyer_uid = Column(String(128), default="")
+    buyer_email = Column(String(255), default="")
     created_at = Column(DateTime, default=utcnow)
+
 
 
 class AuditLog(Base):
@@ -113,3 +118,6 @@ class AuditLog(Base):
     output_data = Column(JSON, default=lambda: {})
     decision = Column(String(50), default="")  # approved, rejected, blocked, info
     reason = Column(Text, default="")
+    actor_uid = Column(String(128), default="")
+    actor_email = Column(String(255), default="")
+    actor_role = Column(String(50), default="")

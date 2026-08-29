@@ -187,8 +187,12 @@ class AuditLogResponse(BaseModel):
     output_data: dict
     decision: str
     reason: str
+    actor_uid: str = ""
+    actor_email: str = ""
+    actor_role: str = ""
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 # ─── Dashboard ─────────────────────────────────────────────

@@ -1,9 +1,42 @@
 import axios from 'axios';
+import { auth } from '../lib/firebase';
 
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 });
+
+// Attach Firebase ID Token on every request
+api.interceptors.request.use(async (config) => {
+  try {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (err) {
+    console.warn('Failed to attach Firebase auth token:', err);
+  }
+  return config;
+});
+
+// ─── Auth & Profile ─────────────────────────────────────────
+export const registerUser = () => api.post('/auth/register', {}).then(r => r.data);
+export const fetchMyProfile = () => api.get('/auth/me').then(r => r.data);
+export const applyAsMerchant = (data: {
+  business_name: string;
+  category: string;
+  description?: string;
+  catalog_url?: string;
+}) => api.post('/auth/apply-merchant', data).then(r => r.data);
+export const fetchApplicationStatus = () => api.get('/auth/application-status').then(r => r.data);
+
+// ─── Admin ──────────────────────────────────────────────────
+export const fetchMerchantApplications = () => api.get('/admin/applications').then(r => r.data);
+export const approveMerchantApplication = (uid: string) => api.post(`/admin/approve-merchant/${uid}`).then(r => r.data);
+export const rejectMerchantApplication = (uid: string, reason?: string) =>
+  api.post(`/admin/reject-merchant/${uid}`, null, { params: { reason } }).then(r => r.data);
+export const fetchAllUsers = () => api.get('/admin/users').then(r => r.data);
 
 // ─── Merchants ─────────────────────────────────────────────
 export const fetchMerchants = () => api.get('/merchants').then(r => r.data);
@@ -36,12 +69,16 @@ export const checkPolicy = (data: { product_id: number; proposed_price: number; 
 export const fetchPolicy = (merchantId: number) => api.get(`/policy/${merchantId}`).then(r => r.data);
 export const updatePolicy = (merchantId: number, data: any) => api.put(`/policy/${merchantId}`, data).then(r => r.data);
 
-// ─── Orders ────────────────────────────────────────────────
+// ─── Orders & Approvals ────────────────────────────────────
 export const createOrder = (data: { product_id: number; amount: number; negotiation_id?: number; buyer_intent?: string }) =>
   api.post('/order/create', data).then(r => r.data);
 export const verifyOrder = (data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
   api.post('/order/verify', data).then(r => r.data);
 export const fetchOrder = (orderId: number) => api.get(`/orders/${orderId}`).then(r => r.data);
+export const fetchMyOrders = () => api.get('/orders/mine').then(r => r.data);
+export const fetchPendingOrders = (merchantId: number) => api.get(`/merchant/${merchantId}/pending-orders`).then(r => r.data);
+export const approvePendingOrder = (orderId: number) => api.post(`/orders/${orderId}/approve`).then(r => r.data);
+export const rejectPendingOrder = (orderId: number) => api.post(`/orders/${orderId}/reject`).then(r => r.data);
 
 // ─── Audit ─────────────────────────────────────────────────
 export const fetchAuditLogs = (merchantId?: number, status?: string) => {
@@ -54,6 +91,12 @@ export const fetchMerchantAudit = (merchantId: number) => api.get(`/audit/${merc
 
 // ─── Dashboard ─────────────────────────────────────────────
 export const fetchDashboard = (merchantId: number) => api.get(`/dashboard/${merchantId}`).then(r => r.data);
+
+// ─── Growth ────────────────────────────────────────────────
+export const fetchGrowthAnalysis = (merchantId: number) => api.get(`/growth/${merchantId}`).then(r => r.data);
+
+// ─── Certificate ───────────────────────────────────────────
+export const fetchCertificate = (merchantId: number) => api.get(`/merchant/${merchantId}/certificate`).then(r => r.data);
 
 // ─── Firebase ──────────────────────────────────────────────
 export const fetchFirebaseStatus = () => api.get('/firebase/status').then(r => r.data);

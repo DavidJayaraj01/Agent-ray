@@ -7,12 +7,13 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import Merchant, Product, Manifest
 from backend.services.trust_scorer import compute_trust_score
+from backend.services.auth_service import require_own_merchant, AuthUser
 
 router = APIRouter(prefix="/api", tags=["certificate"])
 
 
 @router.get("/merchant/{merchant_id}/certificate")
-def get_certificate(merchant_id: int, db: Session = Depends(get_db)):
+def get_certificate(merchant_id: int, db: Session = Depends(get_db), user: AuthUser = Depends(require_own_merchant)):
     """Generate a public Agent-Ready certificate for a merchant.
 
     Returns trust score breakdown, product stats, policy summary,

@@ -11,12 +11,17 @@ from backend.services.growth_engine import (
     compute_gmv_simulation,
 )
 from backend.services.audit_service import log_event
+from backend.services.auth_service import require_own_merchant, AuthUser
 
 router = APIRouter(prefix="/api", tags=["growth"])
 
 
 @router.get("/growth/{merchant_id}")
-def get_growth_analysis(merchant_id: int, db: Session = Depends(get_db)):
+def get_growth_analysis(
+    merchant_id: int,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
+):
     """Run full AI Growth Agent analysis for a merchant.
 
     Returns cross-sell opportunities, pricing outliers, cart-recovery nudges,
@@ -50,6 +55,9 @@ def get_growth_analysis(merchant_id: int, db: Session = Depends(get_db)):
         },
         decision="info",
         reason=f"AI Growth Agent: {gmv['uplift_pct']}% GMV uplift projected",
+        actor_uid=user.uid,
+        actor_email=user.email,
+        actor_role=user.role,
     )
 
     return {

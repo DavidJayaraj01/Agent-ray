@@ -13,7 +13,10 @@ def log_event(
     input_data: dict | None = None,
     output_data: dict | None = None,
     decision: str = "info",
-    reason: str = ""
+    reason: str = "",
+    actor_uid: str = "",
+    actor_email: str = "",
+    actor_role: str = "",
 ) -> AuditLog:
     """Write an audit event. This MUST be called before returning any response
     that involves an LLM decision, policy check, or payment action."""
@@ -26,6 +29,9 @@ def log_event(
         output_data=output_data or {},
         decision=decision,
         reason=reason,
+        actor_uid=actor_uid,
+        actor_email=actor_email,
+        actor_role=actor_role,
     )
     db.add(entry)
     db.commit()
@@ -44,11 +50,15 @@ def log_event(
             "output_data": entry.output_data,
             "decision": entry.decision,
             "reason": entry.reason,
+            "actor_uid": entry.actor_uid,
+            "actor_email": entry.actor_email,
+            "actor_role": entry.actor_role,
         })
     except Exception:
         pass
 
     return entry
+
 
 
 def get_merchant_logs(db: Session, merchant_id: int, limit: int = 100) -> list[AuditLog]:

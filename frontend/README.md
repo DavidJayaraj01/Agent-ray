@@ -35,7 +35,7 @@ Matches the **Razorpay Docs** aesthetic:
 
 ---
 
-## Pages (9 total)
+## Pages (12 total)
 
 ### 1. Landing / Marketplace (`/`)
 - Gradient hero with search bar (rounded-full)
@@ -55,6 +55,7 @@ Matches the **Razorpay Docs** aesthetic:
 ### 4. Merchant Dashboard (`/merchant/:id/dashboard`)
 - Trust score breakdown (4 mini progress bars)
 - Before/after bar chart (Recharts)
+- Quick links to **AI Growth Engine**, **Agent-Ready Certificate**, **ACP/schema.org exports**
 - Recent AI activity feed
 
 ### 5. Policy Settings (`/merchant/:id/policy`)
@@ -70,19 +71,40 @@ Matches the **Razorpay Docs** aesthetic:
 - Ranked product cards with match % and reason checklists
 
 ### 7. Negotiation + Checkout (`/shop/negotiate/:productId`)
-- Live chat transcript (buyer ↔ merchant AI ↔ policy)
-- Policy check result (green ✓ or red ✕)
-- Razorpay payment widget (test mode)
-- **Blocked state**: red card, exact reason, no payment attempt
+- **Real-Time WebSocket Streaming**: Delivers live frames of proposal, AI deliberation, and policy checks
+- **Second Negotiation Round**: Interactive counter-offer decision panel (accept counter, propose Round 2 revised offer, or decline)
+- **AI Growth Upsell & Cross-sell**: 1-click bundle expansion before payment
+- **Policy Engine Gate**: Deterministic pass/blocked status
+- **Razorpay Payment Widget**: Test mode payment execution
+- **Blocked State**: Exact policy violation reason, no payment attempt
 
 ### 8. Receipt (`/shop/receipt/:orderId`)
 - AI Commerce Receipt layout
-- Buyer intent → product → negotiation delta → authorization → payment
+- Buyer intent → product → negotiation delta → cross-sell bundle badge → authorization → payment
 
 ### 9. Audit Log (`/admin/audit`)
 - Filterable by merchant and decision status
 - Expandable rows with input/output JSON
 - Color-coded decisions
+
+### 10. Sarvam AI Voice Assistant (`/voice`)
+- Multi-lingual speech input across 11 Indian languages (Hindi, Tamil, Telugu, etc.)
+- Live microphone recording with audio waveform visualization
+- STT via Sarvam **Saaras v3** & TTS spoken summaries via Sarvam **Bulbul v3**
+- Immediate matched product cards
+
+### 11. AI Growth Dashboard (`/merchant/:id/growth`)
+- Proactive cross-sell opportunities with category attach rates
+- Category pricing outlier analysis ($z$-score deviations)
+- Policy-gated abandoned-cart recovery nudges
+- 90-day GMV simulation: baseline organic vs. agent-assisted revenue comparison bar chart
+
+### 12. Agent-Ready Certificate (`/merchant/:id/certificate`)
+- Shareable public certification badge page
+- Animated SVG trust score ring gauge (0–100)
+- Tier certifications: Platinum, Gold, Silver, Bronze
+- Deterministic SHA-256 verification hash and capability checklist
+- "Copy Certificate URL" for merchant embed / sharing
 
 ---
 

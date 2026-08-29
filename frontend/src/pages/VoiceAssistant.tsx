@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 const LANGUAGES = [
-  { code: 'hi-IN', name: 'Hindi', flag: '🇮🇳' },
   { code: 'en-IN', name: 'English', flag: '🇬🇧' },
+  { code: 'hi-IN', name: 'Hindi', flag: '🇮🇳' },
   { code: 'ta-IN', name: 'Tamil', flag: '🇮🇳' },
   { code: 'te-IN', name: 'Telugu', flag: '🇮🇳' },
   { code: 'kn-IN', name: 'Kannada', flag: '🇮🇳' },
@@ -17,7 +17,7 @@ const LANGUAGES = [
 
 export default function VoiceAssistant() {
   const [isRecording, setIsRecording] = useState(false);
-  const [language, setLanguage] = useState('hi-IN');
+  const [language, setLanguage] = useState('en-IN');
   const [transcript, setTranscript] = useState('');
   const [results, setResults] = useState<any>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -100,13 +100,13 @@ export default function VoiceAssistant() {
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
           <span>🎙️</span>
-          <span>SARVAM AI VOICE ASSISTANT</span>
+          <span>VOICE AI ASSISTANT</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-light text-text tracking-tight mb-2">
           Shop with Your Voice
         </h1>
         <p className="text-sm text-text-secondary max-w-md mx-auto">
-          Speak in any Indian language. Our AI understands Hindi, Tamil, Telugu, and 7 more languages — powered by Sarvam AI.
+          Speak in your preferred language. Our voice AI understands English, Hindi, Tamil, Telugu, and 7+ regional languages.
         </p>
       </div>
 
@@ -133,7 +133,7 @@ export default function VoiceAssistant() {
       <div className="flex flex-col items-center gap-6 mb-10">
         {!isAvailable && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 max-w-sm text-center">
-            <strong>Sarvam AI not configured.</strong> Add your <code className="bg-amber-100 px-1 rounded">SARVAM_API_KEY</code> to <code className="bg-amber-100 px-1 rounded">.env</code> to enable voice.
+            <strong>Voice engine not configured.</strong> Please configure voice services in <code className="bg-amber-100 px-1 rounded">.env</code> to enable voice.
           </div>
         )}
 
@@ -165,7 +165,7 @@ export default function VoiceAssistant() {
         </button>
 
         <p className="text-xs text-text-secondary">
-          {isRecording ? 'Recording... tap to stop' : converseMut.isPending ? 'Processing with Sarvam AI...' : 'Tap to start speaking'}
+          {isRecording ? 'Recording... tap to stop' : converseMut.isPending ? 'Processing voice & matching catalog...' : 'Tap to start speaking'}
         </p>
 
         {/* Waveform animation while recording */}

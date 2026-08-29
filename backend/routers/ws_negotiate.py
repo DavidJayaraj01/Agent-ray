@@ -198,8 +198,9 @@ async def ws_negotiate(websocket: WebSocket, product_id: int):
             })
             await asyncio.sleep(0.8)
 
-            # LLM negotiation response
-            llm_response = generate_negotiation_response(
+            # LLM negotiation response (non-blocking in worker thread)
+            llm_response = await asyncio.to_thread(
+                generate_negotiation_response,
                 product_name=product.name,
                 original_price=product.price,
                 proposed_price=proposed_price,

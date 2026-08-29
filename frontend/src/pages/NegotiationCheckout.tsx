@@ -155,13 +155,20 @@ export default function NegotiationCheckout() {
     mutationFn: (data: any) => negotiate(data),
     onSuccess: (data) => {
       setNegotiation(data);
+      setIsStreaming(false);
+      setThinkingText(null);
       if (data.status === 'accepted' || data.status === 'counter') {
         setPolicyResult({ approved: true, reason: data.policy_reason });
       } else if (data.status === 'blocked') {
         setPolicyResult({ approved: false, reason: data.policy_reason });
       }
     },
-    onError: (err: any) => addToast(err?.response?.data?.detail || 'Negotiation failed', 'error'),
+    onError: (err: any) => {
+      setIsStreaming(false);
+      setThinkingText(null);
+      setNegotiation(null);
+      addToast(err?.response?.data?.detail || 'Negotiation failed', 'error');
+    },
   });
 
   const orderMut = useMutation({
@@ -178,19 +185,35 @@ export default function NegotiationCheckout() {
     if (!proposedPrice) return addToast('Enter your proposed price', 'error');
     const priceNum = Number(proposedPrice);
 
-    // Attempt real-time WebSocket connection first
-    try {
-      setIsStreaming(true);
-      setThinkingText('Connecting to autonomous negotiation channel...');
+    // Provide instant UI transition & feedback
+    const initialTranscript = [
+      { role: 'buyer', message: buyerMessage || `Can I get this for ₹${priceNum.toLocaleString()}?` }
+    ];
 
+    setNegotiation({
+      product_id: pid,
+      original_price: product?.price || 0,
+      proposed_price: priceNum,
+      status: 'pending',
+      negotiation_transcript: initialTranscript,
+    });
+    setIsStreaming(true);
+    setThinkingText('Connecting to autonomous negotiation channel...');
+
+    let wsSucceeded = false;
+
+    // Attempt real-time WebSocket connection
+    try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/negotiate/${pid}`);
+      const wsHost = window.location.port === '5173' ? 'localhost:8000' : window.location.host;
+      const ws = new WebSocket(`${protocol}//${wsHost}/ws/negotiate/${pid}`);
       wsRef.current = ws;
 
-      const transcriptAcc: any[] = [];
+      const transcriptAcc: any[] = [...initialTranscript];
 
       ws.onopen = () => {
-        setThinkingText('Streaming offer to merchant policy engine...');
+        wsSucceeded = true;
+        setThinkingText('Merchant AI is considering your offer...');
         ws.send(JSON.stringify({
           proposed_price: priceNum,
           buyer_message: buyerMessage,
@@ -202,11 +225,7 @@ export default function NegotiationCheckout() {
           const data = JSON.parse(event.data);
 
           if (data.type === 'buyer') {
-            transcriptAcc.push({ role: 'buyer', message: data.message });
-            setNegotiation((prev: any) => ({
-              ...(prev || { product_id: pid, original_price: product?.price || 0 }),
-              negotiation_transcript: [...transcriptAcc],
-            }));
+            // Buyer message already rendered in initial state
           } else if (data.type === 'thinking') {
             setThinkingText(data.message);
           } else if (data.type === 'merchant_ai') {
@@ -251,24 +270,32 @@ export default function NegotiationCheckout() {
       };
 
       ws.onerror = () => {
-        // Fallback to REST API
-        setIsStreaming(false);
-        setThinkingText(null);
-        negotiateMut.mutate({
-          product_id: pid,
-          proposed_price: priceNum,
-          buyer_message: buyerMessage,
-        });
+        if (!wsSucceeded) {
+          // Fallback to REST API immediately
+          setThinkingText('Connecting via secure REST fallback...');
+          negotiateMut.mutate({
+            product_id: pid,
+            proposed_price: priceNum,
+            buyer_message: buyerMessage,
+          });
+        }
       };
 
       ws.onclose = () => {
-        setIsStreaming(false);
-        setThinkingText(null);
+        if (!wsSucceeded) {
+          negotiateMut.mutate({
+            product_id: pid,
+            proposed_price: priceNum,
+            buyer_message: buyerMessage,
+          });
+        } else {
+          setIsStreaming(false);
+          setThinkingText(null);
+        }
       };
     } catch {
       // Fallback to REST API
-      setIsStreaming(false);
-      setThinkingText(null);
+      setThinkingText('Negotiating with Merchant Policy Engine...');
       negotiateMut.mutate({
         product_id: pid,
         proposed_price: priceNum,
@@ -438,10 +465,13 @@ export default function NegotiationCheckout() {
                 </div>
                 <button
                   onClick={handleNegotiate}
-                  disabled={negotiateMut.isPending}
-                  className="w-full py-2.5 sm:py-3 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                  disabled={negotiateMut.isPending || isStreaming}
+                  className="w-full py-2.5 sm:py-3 bg-primary text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 cursor-pointer shadow-xs flex items-center justify-center gap-2"
                 >
-                  {negotiateMut.isPending ? 'Negotiating...' : 'Submit Offer'}
+                  {(negotiateMut.isPending || isStreaming) && (
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {negotiateMut.isPending || isStreaming ? 'Negotiating...' : 'Submit Offer'}
                 </button>
               </div>
             </div>
@@ -452,12 +482,27 @@ export default function NegotiationCheckout() {
             <div className="bg-white rounded-2xl border border-border shadow-sm p-4 sm:p-6">
               <div className="flex items-center justify-between gap-2 mb-4">
                 <h3 className="font-semibold text-text text-base">Negotiation Transcript</h3>
-                {isStreaming && (
-                  <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    LIVE AGENT STREAM
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {!isStreaming && (
+                    <button
+                      onClick={() => {
+                        setNegotiation(null);
+                        setPolicyResult(null);
+                        setShowCounterForm(false);
+                      }}
+                      className="text-xs text-text-secondary hover:text-primary font-medium transition-colors cursor-pointer"
+                      title="Make another offer"
+                    >
+                      ↺ New Offer
+                    </button>
+                  )}
+                  {isStreaming && (
+                    <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      LIVE AGENT STREAM
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="space-y-3 sm:space-y-4">
                 {negotiation.negotiation_transcript?.map((msg: any, i: number) => (

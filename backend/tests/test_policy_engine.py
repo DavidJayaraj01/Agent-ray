@@ -180,6 +180,27 @@ class TestBlockedOfferNeverReachesOrder:
 
         assert order_created is False, "Order was created despite policy rejection!"
 
+    def test_mock_razorpay_zero_calls_on_blocked_order(self):
+        """Mock Razorpay create_order and assert it is called ZERO times when policy rejects."""
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        from backend.main import app
+
+        client = TestClient(app)
+
+        with patch("backend.services.razorpay_service.create_order") as mock_rp:
+            # Attempt to create order with excessive discount on Nike shoes (ID 20, price ~8995)
+            response = client.post("/api/order/create", json={
+                "product_id": 20,
+                "amount": 1000.0,
+                "buyer_intent": "Attempting unauthorized 88% discount",
+            })
+
+            # Assert request was blocked by policy with HTTP 403
+            assert response.status_code == 403
+            # Assert Razorpay create_order was called exactly ZERO times
+            assert mock_rp.call_count == 0, f"Razorpay create_order called {mock_rp.call_count} times on blocked offer!"
+
 
 # ─── Rate limiting tests ────────────────────────────────────
 class TestRateLimiting:

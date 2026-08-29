@@ -238,7 +238,7 @@ python -m pytest backend/tests/test_policy_engine.py -v
 ## 📄 Additional Documentation
 
 - [**Backend README**](backend/README.md) — API reference, data models, service architecture
-- [**Frontend README**](docs/FRONTEND.md) — Component guide, page structure, design system
+- [**Frontend README**](frontend/README.md) — Component guide, 12 page views, design system
 
 ---
 
@@ -249,23 +249,31 @@ Agent-Ray/
 ├── backend/
 │   ├── main.py              # FastAPI app + startup safety checks
 │   ├── database.py          # SQLite + SQLAlchemy setup
-│   ├── models.py            # 7 ORM models
+│   ├── models.py            # ORM models (Merchant, Product, Manifest, Order, AuditLog, Negotiation)
 │   ├── schemas.py           # Pydantic request/response schemas
-│   ├── seed_data.py         # 3 synthetic merchants + products
-│   ├── .env.example         # Environment variables template
+│   ├── seed_data.py         # Real-world merchants (Meesho, Amazon India, Flipkart)
+│   ├── .env.example         # Environment variables template (Razorpay, Ollama, Firebase, Sarvam)
 │   ├── requirements.txt     # Python dependencies
-│   ├── routers/             # 10 API route files
-│   └── services/            # Business logic (LLM, policy, trust, etc.)
-├── src/                     # React frontend
-│   ├── App.tsx              # Routing + navbar
-│   ├── main.tsx             # Entry point
-│   ├── index.css            # Tailwind design tokens
-│   ├── api/client.ts        # Axios API client
-│   ├── stores/uiStore.ts    # Zustand store
-│   ├── components/          # Shared UI components
-│   └── pages/               # 9 page components
+│   ├── routers/             # 15 API routers (merchants, manifest, trust, intent, match,
+│   │                        #  negotiate, policy, orders, audit, dashboard, firebase,
+│   │                        #  voice, growth, export, certificate, ws_negotiate)
+│   └── services/            # Core logic (policy_engine, growth_engine, sarvam_service,
+│                            #  llm_service, trust_scorer, catalog_normalizer, razorpay_service)
+├── frontend/                # React 19 + TypeScript + Tailwind CSS
+│   ├── src/
+│   │   ├── App.tsx          # Floating navbar & router
+│   │   ├── main.tsx         # App entry point
+│   │   ├── index.css        # Razorpay aesthetic design tokens
+│   │   ├── api/client.ts    # Axios client & REST endpoints
+│   │   ├── stores/uiStore.ts# Zustand UI state
+│   │   ├── components/      # Shared components (TrustBadge, ProductCard, etc.)
+│   │   └── pages/           # 12 page components (Marketplace, Onboarding, Review,
+│   │                        #  Dashboard, Policy, Shop, NegotiationCheckout, Receipt,
+│   │                        #  AuditLog, VoiceAssistant, GrowthDashboard, Certificate)
+│   ├── package.json
+│   └── vite.config.ts
 ├── README.md                # ← you are here
-└── .gitignore
+└── PROJECT_SUMMARY_AND_FEATURES.txt # Complete text summary of all features & work done
 ```
 
 ---

@@ -1,6 +1,11 @@
-"""Negotiation endpoint — LLM proposes, policy engine gates."""
+"""Negotiation endpoint — LLM proposes, policy engine gates.
+
+Tags negotiations with the authenticated buyer's identity and records
+actor_uid / actor_role in the append-only audit trail before returning.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from backend.database import get_db
 from backend.models import Product, Merchant, Negotiation
@@ -8,12 +13,17 @@ from backend.schemas import NegotiateRequest, NegotiateResponse, CounterOfferReq
 from backend.services.llm_service import generate_negotiation_response
 from backend.services.policy_engine import validate_offer, check_negotiation_rate, check_anomaly_pattern
 from backend.services.audit_service import log_event
+from backend.services.auth_service import get_optional_user, AuthUser
 
 router = APIRouter(prefix="/api", tags=["negotiate"])
 
 
 @router.post("/negotiate", response_model=NegotiateResponse)
-def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
+async def negotiate(
+    data: NegotiateRequest,
+    db: Session = Depends(get_db),
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
     product = db.query(Product).filter(Product.id == data.product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -23,6 +33,9 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Merchant not found")
 
     policy_rules = merchant.policy_rules or {}
+    actor_uid = user.uid if user else ""
+    actor_email = user.email if user else ""
+    actor_role = user.role if user else "buyer"
 
     # ABUSE GUARD: Rate limit check
     rate_check = check_negotiation_rate(data.product_id)
@@ -34,6 +47,9 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
             output_data=rate_check,
             decision="blocked",
             reason=rate_check["reason"],
+            actor_uid=actor_uid,
+            actor_email=actor_email,
+            actor_role=actor_role,
         )
         raise HTTPException(status_code=429, detail=rate_check["reason"])
 
@@ -47,6 +63,9 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
             output_data=anomaly_check,
             decision="blocked",
             reason=anomaly_check["reason"],
+            actor_uid=actor_uid,
+            actor_email=actor_email,
+            actor_role=actor_role,
         )
         raise HTTPException(status_code=403, detail=anomaly_check["reason"])
 
@@ -118,6 +137,9 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         },
         decision="approved" if status == "accepted" else "rejected" if status == "rejected" else "blocked",
         reason=policy_reason,
+        actor_uid=actor_uid,
+        actor_email=actor_email,
+        actor_role=actor_role,
     )
 
     # Create negotiation record
@@ -131,6 +153,8 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
         status=status,
         policy_reason=policy_reason,
         negotiation_transcript=transcript,
+        buyer_uid=actor_uid,
+        buyer_email=actor_email,
     )
     db.add(negotiation)
     db.commit()
@@ -149,6 +173,7 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
             "discount_percent": negotiation.discount_percent,
             "status": negotiation.status,
             "policy_reason": negotiation.policy_reason,
+            "buyer_uid": negotiation.buyer_uid,
             "created_at": negotiation.created_at.isoformat() if negotiation.created_at else None,
         })
     except Exception:
@@ -158,10 +183,11 @@ def negotiate(data: NegotiateRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/negotiate/counter/{negotiation_id}", response_model=NegotiateResponse)
-def counter_negotiation(
+async def counter_negotiation(
     negotiation_id: int,
     data: CounterOfferRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: Optional[AuthUser] = Depends(get_optional_user),
 ):
     """Second-round negotiation endpoint: buyer can accept, decline, or make a counter-offer."""
     neg = db.query(Negotiation).filter(Negotiation.id == negotiation_id).first()
@@ -177,6 +203,9 @@ def counter_negotiation(
         raise HTTPException(status_code=404, detail="Merchant not found")
 
     policy_rules = merchant.policy_rules or {}
+    actor_uid = user.uid if user else neg.buyer_uid
+    actor_email = user.email if user else neg.buyer_email
+    actor_role = user.role if user else "buyer"
 
     # Handle buyer accepting merchant counter-offer
     if data.action == "accept":
@@ -187,6 +216,19 @@ def counter_negotiation(
         transcript.append({"role": "merchant_ai", "message": f"Deal confirmed at ₹{accepted_price:,.0f}! You can proceed to checkout."})
         transcript.append({"role": "policy", "message": f"Approved: agreed at ₹{accepted_price:,.0f}", "status": "accepted"})
         neg.negotiation_transcript = transcript
+
+        log_event(
+            db, actor="buyer", action="negotiation_counter_accepted",
+            merchant_id=merchant.id,
+            input_data={"negotiation_id": negotiation_id, "accepted_price": accepted_price},
+            output_data={"status": "accepted"},
+            decision="approved",
+            reason=f"Buyer accepted counter at ₹{accepted_price:,.0f}",
+            actor_uid=actor_uid,
+            actor_email=actor_email,
+            actor_role=actor_role,
+        )
+
         db.commit()
         db.refresh(neg)
         return neg
@@ -198,6 +240,19 @@ def counter_negotiation(
         transcript.append({"role": "buyer", "message": "I decline this counter-offer."})
         transcript.append({"role": "policy", "message": "Negotiation concluded without agreement.", "status": "rejected"})
         neg.negotiation_transcript = transcript
+
+        log_event(
+            db, actor="buyer", action="negotiation_counter_declined",
+            merchant_id=merchant.id,
+            input_data={"negotiation_id": negotiation_id},
+            output_data={"status": "rejected"},
+            decision="rejected",
+            reason="Buyer declined merchant counter-offer",
+            actor_uid=actor_uid,
+            actor_email=actor_email,
+            actor_role=actor_role,
+        )
+
         db.commit()
         db.refresh(neg)
         return neg
@@ -258,6 +313,9 @@ def counter_negotiation(
         output_data={"counter_price": counter_price, "status": status},
         decision="approved" if status == "accepted" else "blocked",
         reason=reason,
+        actor_uid=actor_uid,
+        actor_email=actor_email,
+        actor_role=actor_role,
     )
 
     db.commit()

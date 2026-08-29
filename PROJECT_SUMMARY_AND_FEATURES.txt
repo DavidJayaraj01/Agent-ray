@@ -1,0 +1,333 @@
+================================================================================
+AGENTREADY — AUTONOMOUS COMMERCE READINESS & GROWTH PLATFORM
+Comprehensive Summary of Work Accomplished, Architecture & Full Feature Set
+Razorpay Buildathon — Track 01: "AI Growth & Agentic Commerce"
+================================================================================
+
+1. EXECUTIVE SUMMARY & TRACK 01 ALIGNMENT
+--------------------------------------------------------------------------------
+AgentReady is an end-to-end Autonomous Commerce Readiness Platform built for the
+Razorpay Buildathon Track 01.
+
+Track 01 has two foundational pillars:
+  1. "Grow the merchant's revenue" — achieved via the proactive AI Growth Agent,
+     automated bundling with category-aware attach rates, and 90-day GMV simulation.
+  2. "Make them sellable to AI buyers" — achieved via standardized AI manifests,
+     trust scoring (0-100), multi-round counter-offer negotiation, protocol exports
+     (ACP / schema.org), real-time WebSocket streaming, and a deterministic safety gate.
+
+The platform bridges messy real-world merchant catalogs (Meesho, Amazon India,
+Flipkart) and autonomous buyer agents, allowing agents to discover, negotiate, and
+execute Razorpay payments under strict merchant-defined financial boundaries.
+
+
+2. WHAT WE HAVE BUILT (CHRONOLOGICAL & SYSTEM PROGRESSION)
+--------------------------------------------------------------------------------
+From inception to final build, the platform was developed across key milestones:
+
+  A. Foundation & Safety Architecture:
+     - Implemented a deterministic, pure-Python Policy Engine (services/policy_engine.py).
+       Critical Invariant: LLMs NEVER touch money or order creation directly. All offers
+       must pass through deterministic Python checks.
+     - Hardened startup checks: live Razorpay keys are immediately rejected; only test keys
+       (rzp_test_*) are accepted.
+     - Implemented an append-only AuditLog database that writes before returning responses.
+
+  B. Catalog Normalization & Trust Scoring:
+     - Created catalog normalizer converting raw CSV/text into structured Product manifests.
+     - Implemented 4-component Trust Scorer (Completeness 35%, Settlement Consistency 30%,
+       Dispute Rate 20%, Freshness 15%).
+
+  C. Real-World Authentic Merchants & Dynamic Market Scraping:
+     - Populated verified catalogs with real pricing and product links:
+       * Meesho Fashion Direct (Women's Sarees, Anarkalis, Kurtis, Ethnic Wear)
+       * Amazon India Official Hub (Electronics, Sony ANC headphones, iPads, Logitech)
+       * Flipkart SuperComNet Sports (Nike Pegasus, Puma RS-X, Adidas Ultraboost)
+     - Added real-time source web link integration so buyers can view live listings.
+
+  D. Realtime Firebase Synchronization:
+     - Connected Firebase Realtime Database (agent-ray-default-rtdb) via Admin SDK.
+     - Built bidirectional sync for merchants, products, manifests, negotiations, orders,
+       and audit logs.
+
+  E. AI Growth & Upsell Agent (Revenue Growth):
+     - Implemented category-aware "Frequently Bought Together" bundles (e.g., MagSafe Armor
+       Case + 25W Charger for smartphones, Anti-Blister Socks for shoes).
+     - Allowed 1-click cart expansion with policy-validated bundle totals up to ₹2,50,000.
+
+  F. Sarvam AI Multilingual Voice Assistant:
+     - Integrated Sarvam AI APIs: Saaras v3 for Speech-to-Text and Bulbul v3 for
+       Text-to-Speech across 11 Indian languages (Hindi, Tamil, Telugu, Kannada, etc.).
+     - Built dedicated Voice AI studio (/voice) with live microphone waveform animation,
+       transcript display, parsed intent tags, and audio playback.
+
+  G. Proactive AI Growth Agent & 90-Day GMV Simulation:
+     - Proactive background analytics for merchants (/merchant/:id/growth):
+       * Cross-Sell attach rates and revenue uplift per order
+       * Statistical pricing outliers using standard deviation z-scores
+       * Abandoned-cart recovery nudges validated through the policy engine
+       * 90-Day GMV Simulation: baseline organic vs. agent-assisted comparison chart.
+
+  H. Protocol Interoperability & Manifest Exports:
+     - Built schema.org/Product JSON-LD export (/api/export/schema-org/{id}).
+     - Built Agent Commerce Protocol envelope (/api/export/acp/{id}) implementing
+       ACP v0.1 draft standards for autonomous ecosystem interop (UAP, ACP, AP2, x402).
+
+  I. Public "Agent-Ready" Certificate:
+     - Built shareable merchant badge page (/merchant/:id/certificate).
+     - Features animated SVG trust score ring gauge, Platinum/Gold/Silver tier badges,
+       four-factor breakdown, and deterministic SHA-256 verification hash.
+
+  J. Real-Time WebSocket Streaming & Multi-Round Counter Negotiation:
+     - Created WebSocket endpoint (/ws/negotiate/{id}) streaming proposal frames,
+       deliberation thinking states, and policy verdicts live.
+     - Added Round 2 counter-offer decision panel in checkout (Accept, Counter, Decline).
+
+  K. Abuse & Anomaly Guard:
+     - Added in-memory rate-limiting (max 5 negotiation attempts per 10 minutes per product).
+     - Added anomaly detection blocking aggressive discount demands exceeding 50%.
+     - Expanded test suite to 34 unit tests (all passing).
+
+
+3. COMPLETE LIST OF FEATURES
+--------------------------------------------------------------------------------
+
+[FEATURE 1: PURE-PYTHON DETERMINISTIC POLICY ENGINE]
+- File: backend/services/policy_engine.py
+- Acts as the immutable gatekeeper for every financial action.
+- Validates:
+  * Maximum allowed discount percentage (max_discount)
+  * Minimum floor price (min_price)
+  * Maximum auto-approved order cap (max_auto_order, up to ₹2,50,000)
+  * Negotiation enabled toggle
+- 100% deterministic, zero LLM hallucination risk.
+
+[FEATURE 2: ABUSE & ANOMALY GUARD]
+- File: backend/services/policy_engine.py
+- Rate-limits buyer agents to 5 negotiation attempts per product within a 10-minute window.
+- Anomaly Detection: flags and blocks suspicious offers demanding >50% discount.
+- All blocked attempts are immediately written to the append-only AuditLog.
+
+[FEATURE 3: SARVAM AI MULTILINGUAL VOICE ASSISTANT]
+- Files: backend/services/sarvam_service.py, backend/routers/voice.py, frontend/src/pages/VoiceAssistant.tsx
+- Models:
+  * Speech-to-Text: Sarvam Saaras v3
+  * Text-to-Speech: Sarvam Bulbul v3 (speaker: kavya, aditya, shubh, priya, etc.)
+- Supports 11 Indian Languages: Hindi (hi-IN), English (en-IN), Tamil (ta-IN), Telugu (te-IN),
+  Kannada (kn-IN), Malayalam (ml-IN), Marathi (mr-IN), Bengali (bn-IN), Gujarati (gu-IN),
+  Punjabi (pa-IN), Odia (or-IN).
+- End-to-end pipeline: User speaks → transcribed via STT → parsed through local LLM →
+  matches product database → summarized & spoken aloud via TTS.
+
+[FEATURE 4: PROACTIVE AI GROWTH AGENT & GMV SIMULATOR]
+- Files: backend/services/growth_engine.py, backend/routers/growth.py, frontend/src/pages/GrowthDashboard.tsx
+- Proactive intelligence module analyzing catalog data:
+  * Cross-Sell Intelligence: Identifies category pairings (e.g. Smartphones + Audio at 68%
+    attach rate) and calculates revenue uplift per order.
+  * Category Pricing Outlier Detection: Computes median, mean, and standard deviation z-scores
+    to flag overpriced/underpriced items (>1.2σ).
+  * Cart Recovery Nudges: Simulates abandoned checkout recovery offers, all gated through
+    the policy engine before presentation.
+  * 90-Day GMV Simulation: Projects baseline organic sales vs agent-assisted revenue uplift
+    with weekly Recharts breakdown.
+
+[FEATURE 5: PROTOCOL-COMPATIBLE MANIFEST EXPORTS (ACP & SCHEMA.ORG)]
+- File: backend/routers/export.py
+- Answers open-ecosystem interoperability (UAP, ACP, AP2, x402):
+  * /api/export/acp/{id}: Agent Commerce Protocol (ACP v0.1) envelope containing merchant
+    trust ratings, discount policies, auto-order thresholds, and structured inventory.
+  * /api/export/schema-org/{id}: Standardized schema.org/Product JSON-LD format for
+    universal crawlers and Google Shopping.
+
+[FEATURE 6: PUBLIC AGENT-READY CERTIFICATE]
+- Files: backend/routers/certificate.py, frontend/src/pages/AgentReadyCertificate.tsx
+- Shareable merchant badge page at /merchant/:id/certificate.
+- Highlights:
+  * Animated circular SVG ring gauge showing 0–100 score
+  * Certification Tiers: Platinum (≥85), Gold (≥70), Silver (≥50), Bronze (<50)
+  * Breakdown bars for Completeness, Settlement, Dispute Rate, and Freshness
+  * Deterministic SHA-256 verification hash
+  * Capability checklist and one-click "Copy Certificate URL"
+
+[FEATURE 7: REAL-TIME WEBSOCKET STREAMING NEGOTIATION]
+- Files: backend/routers/ws_negotiate.py, frontend/src/pages/NegotiationCheckout.tsx
+- Replaces static polling with WebSocket streaming on /ws/negotiate/{product_id}.
+- Streams live frames:
+  1. Buyer's initial offer frame
+  2. Live "deliberating / thinking" pulsating indicator
+  3. Merchant AI proposed counter-offer
+  4. Policy engine validation verdict
+- Seamless automatic fallback to REST API if WebSockets are unavailable.
+
+[FEATURE 8: SECOND NEGOTIATION ROUND (COUNTER-OFFER)]
+- Files: backend/routers/negotiate.py, frontend/src/pages/NegotiationCheckout.tsx
+- Extends negotiation from a single call to true multi-round agentic interaction:
+  * If merchant AI counters, buyer receives a Round 2 Decision Card.
+  * Buyer can:
+    1. Accept Counter: One-click price lock at merchant's price.
+    2. Submit Round 2 Counter-Offer: Propose a revised price and note, evaluated
+       again by LLM and policy engine.
+    3. Decline Deal: Cleanly exit the negotiation.
+
+[FEATURE 9: AI GROWTH & UPSELL AGENT (CHECKOUT BUNDLING)]
+- Files: frontend/src/pages/NegotiationCheckout.tsx, frontend/src/pages/Receipt.tsx
+- When a negotiation succeeds, the Upsell Agent recommends an exclusive category-aware
+  bundle (Phone Case + Charger, Performance Socks, Audio Hard Case, USB-C Hub).
+- 1-click cart expansion updates the total payable amount, re-validated by the policy
+  engine and passed to Razorpay.
+
+[FEATURE 10: TRUST SCORER (0–100 COMPREHENSIVE RATING)]
+- File: backend/services/trust_scorer.py
+- Four-dimension weighted scoring:
+  * Catalog Completeness (35%)
+  * Settlement Consistency (30%)
+  * Dispute Rate Inverse (20%)
+  * Catalog Freshness (15%)
+
+[FEATURE 11: RAZORPAY INTEGRATION (TEST-MODE ENFORCED)]
+- File: backend/services/razorpay_service.py
+- Creates Razorpay orders only AFTER policy check validation.
+- Verifies HMAC-SHA256 payment signatures.
+- Fails closed: rejects live keys at startup to protect merchants.
+
+[FEATURE 12: FIREBASE REALTIME DATABASE SYNCHRONIZATION]
+- File: backend/services/firebase_service.py
+- Synchronizes all merchants, products, manifests, negotiations, orders, and audit logs
+  to Firebase Realtime Database in real time.
+
+[FEATURE 13: IMMUTABLE APPEND-ONLY AUDIT LOG]
+- File: backend/services/audit_service.py
+- Records all system, LLM, policy, and buyer events with timestamps, input JSON,
+  output JSON, decisions (approved, blocked, info), and human-readable reasons.
+- Writes before user responses are dispatched.
+
+
+4. FRONTEND APPLICATION PAGES (12 PAGES TOTAL)
+--------------------------------------------------------------------------------
+1.  Landing / Marketplace (`/`) — Hero, search bar, active merchant grid, trust badges.
+2.  Merchant Onboarding (`/merchant/new`) — 3-step wizard for details and catalog parsing.
+3.  Manifest Review (`/merchant/:id/manifest`) — Product table with confidence flags and inline edits.
+4.  Merchant Dashboard (`/merchant/:id/dashboard`) — Trust metrics, before/after match rate chart,
+    quick links to Growth Engine, Certificate, and Protocol Exports.
+5.  Policy Settings (`/merchant/:id/policy`) — Sliders for max discount, min price, and max order limit.
+6.  AI Shop / Buyer Search (`/shop`) — Natural language search, parsed intent chips, ranked matches.
+7.  Negotiation & Checkout (`/shop/negotiate/:id`) — Live WebSocket chat, Round 2 counter-offer card,
+    AI Growth bundle add-on, policy status, and Razorpay payment widget.
+8.  AI Receipt (`/shop/receipt/:id`) — Audit receipt with intent, discount delta, bundle badge, and payment ID.
+9.  Audit Trail (`/admin/audit`) — Filterable log table with expandable JSON payloads.
+10. Voice AI Studio (`/voice`) — Sarvam AI voice assistant with microphone recording, waveform, and audio playback.
+11. AI Growth Dashboard (`/merchant/:id/growth`) — Cross-sell table, pricing outlier analysis, and 90-day GMV bar chart.
+12. Agent-Ready Certificate (`/merchant/:id/certificate`) — Shareable public badge with animated ring gauge and SHA-256 hash.
+
+
+5. BACKEND API ENDPOINTS REFERENCE
+--------------------------------------------------------------------------------
+Merchants:
+  POST /api/merchants                         Create merchant
+  GET  /api/merchants                         List merchants
+  GET  /api/merchants/{id}                    Get merchant
+
+Manifest:
+  POST /api/manifest/generate/{id}            Normalize catalog into manifest
+  GET  /api/manifest/{id}                     Get manifest + products
+  PUT  /api/products/{id}                     Inline edit product
+
+Trust:
+  POST /api/trust/score/{id}                  Compute trust score
+
+Intent & Match:
+  POST /api/intent                            Parse NL intent into constraints
+  POST /api/match                             Rank and match products
+
+Negotiation & Policy:
+  POST /api/negotiate                         Submit negotiation offer
+  POST /api/negotiate/counter/{id}            Submit Round 2 counter-offer
+  WS   /ws/negotiate/{id}                     WebSocket real-time streaming
+  POST /api/policy/check                      Validate offer against policy
+  GET  /api/policy/{id}                       Get merchant policy rules
+  PUT  /api/policy/{id}                       Update policy rules
+
+AI Growth Agent:
+  GET  /api/growth/{id}                       Get cross-sell, pricing outliers, GMV simulation
+
+Sarvam AI Voice Assistant:
+  GET  /api/voice/status                      Get voice service readiness and languages
+  POST /api/voice/stt                         Transcribe audio file (Saaras v3)
+  POST /api/voice/tts                         Convert text to speech (Bulbul v3)
+  POST /api/voice/converse                    Full voice commerce pipeline
+
+Auth & Role-Based Access Control (Firebase Auth + RTDB):
+  POST /api/auth/register                     Sync & register user profile in RTDB (defaults to Buyer)
+  GET  /api/auth/me                           Get current authenticated profile and role
+  POST /api/auth/apply-merchant               Buyer applies for merchant store ownership
+  GET  /api/auth/application-status           Check status of merchant onboarding application
+  GET  /api/admin/applications                Admin lists all pending merchant applications
+  POST /api/admin/approve-merchant/{uid}      Admin approves store, creates Merchant, elevates role
+  POST /api/admin/reject-merchant/{uid}       Admin declines onboarding application with reason
+  GET  /api/admin/users                       Admin lists all registered platform users
+  GET  /api/orders/mine                       Buyer views own historical agent orders
+  GET  /api/merchant/{id}/pending-orders      Merchant reviews high-value orders awaiting approval
+  POST /api/orders/{id}/approve               Merchant manually releases order over max_auto_order
+  POST /api/orders/{id}/reject                Merchant declines high-value order
+
+Protocol Exports & Certificate:
+  GET  /api/export/acp/{id}                   Export ACP v0.1 envelope
+  GET  /api/export/schema-org/{id}            Export schema.org JSON-LD
+  GET  /api/merchant/{id}/certificate         Public Agent-Ready Certificate
+
+Orders (Razorpay):
+  POST /api/order/create                      Create Razorpay order (policy-gated, idempotent)
+  POST /api/order/verify                      Verify payment signature
+  GET  /api/orders/{id}                       Get order details
+
+Audit & Analytics:
+  GET  /api/audit                             Get full audit trail (Admin only)
+  GET  /api/audit/{id}                        Get merchant audit trail (Merchant / Admin)
+  GET  /api/dashboard/{id}                    Get dashboard analytics
+  GET  /api/firebase/status                   Check Firebase sync status
+  POST /api/firebase/ping                     Ping Firebase RTDB
+
+
+6. VERIFICATION, TESTING & CODE QUALITY
+--------------------------------------------------------------------------------
+- Backend Tests: 43 pytest unit & integration tests covering:
+  * Google OAuth & Bearer Token Verification
+  * Role-Based Access Control (Buyer, Merchant, Admin)
+  * Tenant isolation (cross-merchant access rejected with HTTP 403)
+  * Pre-response actor_uid and actor_role audit trail attribution
+  * Mock Razorpay zero-call assertion on policy rejection
+  * Multi-rule discount limits, floor prices, and ceiling caps
+  * Rate limiting abuse guards and anomaly detection
+  * Firebase Admin SDK and RTDB ping diagnostics
+  Result: 43 passed in 11.12s (100% pass rate).
+- Frontend Linter: oxlint passed with 0 errors and 0 warnings across 27 files.
+- Frontend Build: tsc -b && vite build completed successfully (code 0).
+- Realtime Database Security Rules: Defined in database.rules.json preventing
+  client-side role tampering and locking audit logs to backend-only writes.
+
+
+7. ENVIRONMENT VARIABLES CONFIGURATION
+--------------------------------------------------------------------------------
+Backend (.env):
+RAZORPAY_KEY_ID=rzp_test_YOUR_KEY_ID
+RAZORPAY_KEY_SECRET=YOUR_TEST_SECRET
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+DATABASE_URL=sqlite:///./agentready.db
+FIREBASE_CREDENTIALS_PATH=firebase-credentials.json
+FIREBASE_PROJECT_ID=agent-ray
+FIREBASE_DATABASE_URL=https://agent-ray-default-rtdb.asia-southeast1.firebasedatabase.app
+SARVAM_API_KEY=sk_test_YOUR_SARVAM_API_KEY
+ADMIN_EMAIL=your_admin_google_account@gmail.com
+
+Frontend (.env):
+VITE_FIREBASE_API_KEY=AIzaSyDn0iZb4-HKTSQy-ekCLjy_tA27O2rjcP8
+VITE_FIREBASE_AUTH_DOMAIN=agent-ray.firebaseapp.com
+VITE_FIREBASE_DATABASE_URL=https://agent-ray-default-rtdb.asia-southeast1.firebasedatabase.app
+VITE_FIREBASE_PROJECT_ID=agent-ray
+VITE_FIREBASE_STORAGE_BUCKET=agent-ray.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=68548329694
+VITE_FIREBASE_APP_ID=1:68548329694:web:7add06f31183d46b8dc24f
+VITE_FIREBASE_MEASUREMENT_ID=G-13F7LDVK2K
+================================================================================
+

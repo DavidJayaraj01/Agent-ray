@@ -1,17 +1,25 @@
-"""Merchant CRUD endpoints."""
+"""Merchant CRUD endpoints with role & ownership guards."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from backend.database import get_db
 from backend.models import Merchant
 from backend.schemas import MerchantCreate, MerchantResponse, MerchantUpdate
 from backend.services.audit_service import log_event
+from backend.services.auth_service import (
+    get_optional_user, require_own_merchant, AuthUser,
+)
 
 router = APIRouter(prefix="/api", tags=["merchants"])
 
 
 @router.post("/merchants", response_model=MerchantResponse)
-def create_merchant(data: MerchantCreate, db: Session = Depends(get_db)):
+def create_merchant(
+    data: MerchantCreate,
+    db: Session = Depends(get_db),
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
     policy = data.policy_rules.model_dump() if data.policy_rules else {
         "max_discount": 10,
         "min_price": 100,
@@ -31,6 +39,16 @@ def create_merchant(data: MerchantCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(merchant)
 
+    # If the user is authenticated, link their RTDB profile to this merchant
+    if user:
+        try:
+            from backend.services.firebase_service import _get_db_ref
+            user_ref = _get_db_ref(f"users/{user.uid}")
+            if user_ref:
+                user_ref.update({"merchantId": merchant.id, "role": "merchant"})
+        except Exception:
+            pass
+
     # Sync to Firebase
     try:
         from backend.services.firebase_service import sync_merchant_to_firebase
@@ -48,13 +66,16 @@ def create_merchant(data: MerchantCreate, db: Session = Depends(get_db)):
 
     log_event(
         db,
-        actor="system",
+        actor="merchant" if user else "system",
         action="merchant_created",
         merchant_id=merchant.id,
         input_data={"name": data.name, "category": data.category},
         output_data={"merchant_id": merchant.id},
         decision="info",
         reason=f"Merchant '{data.name}' created",
+        actor_uid=user.uid if user else "",
+        actor_email=user.email if user else "",
+        actor_role=user.role if user else "merchant",
     )
 
     return merchant
@@ -74,7 +95,12 @@ def get_merchant(merchant_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/merchants/{merchant_id}", response_model=MerchantResponse)
-def update_merchant(merchant_id: int, data: MerchantUpdate, db: Session = Depends(get_db)):
+def update_merchant(
+    merchant_id: int,
+    data: MerchantUpdate,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
+):
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
@@ -91,12 +117,15 @@ def update_merchant(merchant_id: int, data: MerchantUpdate, db: Session = Depend
 
     log_event(
         db,
-        actor="system",
+        actor="merchant",
         action="merchant_updated",
         merchant_id=merchant.id,
         input_data=data.model_dump(exclude_none=True),
         decision="info",
         reason=f"Merchant '{merchant.name}' updated",
+        actor_uid=user.uid,
+        actor_email=user.email,
+        actor_role=user.role,
     )
 
     return merchant

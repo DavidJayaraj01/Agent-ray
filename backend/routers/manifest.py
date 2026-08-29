@@ -8,12 +8,13 @@ from backend.models import Merchant, Product, Manifest
 from backend.schemas import ManifestResponse, ProductResponse
 from backend.services.catalog_normalizer import normalize_catalog
 from backend.services.audit_service import log_event
+from backend.services.auth_service import require_own_merchant, get_current_user, AuthUser
 
 router = APIRouter(prefix="/api", tags=["manifest"])
 
 
 @router.post("/manifest/generate/{merchant_id}")
-def generate_manifest(merchant_id: int, db: Session = Depends(get_db)):
+def generate_manifest(merchant_id: int, db: Session = Depends(get_db), user: AuthUser = Depends(require_own_merchant)):
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
@@ -144,6 +145,7 @@ def generate_manifest(merchant_id: int, db: Session = Depends(get_db)):
 
 @router.get("/manifest/{merchant_id}")
 def get_manifest(merchant_id: int, db: Session = Depends(get_db)):
+
     manifest = db.query(Manifest).filter(Manifest.merchant_id == merchant_id).first()
     if not manifest:
         raise HTTPException(status_code=404, detail="Manifest not found — generate it first")
@@ -182,7 +184,7 @@ def get_manifest(merchant_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/products/{product_id}")
-def update_product(product_id: int, data: dict, db: Session = Depends(get_db)):
+def update_product(product_id: int, data: dict, db: Session = Depends(get_db), user: AuthUser = Depends(get_current_user)):
     """Inline edit a product field (used from manifest review page)."""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:

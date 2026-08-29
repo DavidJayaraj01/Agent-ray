@@ -8,12 +8,17 @@ from backend.schemas import (
     DashboardResponse, MerchantResponse, TrustBreakdown, AuditLogResponse,
 )
 from backend.services.trust_scorer import compute_trust_score
+from backend.services.auth_service import require_own_merchant, AuthUser
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
 
 @router.get("/dashboard/{merchant_id}", response_model=DashboardResponse)
-def get_dashboard(merchant_id: int, db: Session = Depends(get_db)):
+def get_dashboard(
+    merchant_id: int,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
+):
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")

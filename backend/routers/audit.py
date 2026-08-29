@@ -6,8 +6,13 @@ from typing import Optional
 from backend.database import get_db
 from backend.schemas import AuditLogResponse
 from backend.services.audit_service import get_all_logs, get_merchant_logs
+from backend.services.auth_service import (
+    get_current_user, require_role, require_own_merchant, AuthUser,
+)
 
 router = APIRouter(prefix="/api", tags=["audit"])
+
+_require_admin = require_role("admin")
 
 
 @router.get("/audit", response_model=list[AuditLogResponse])
@@ -16,6 +21,7 @@ def list_all_audit_logs(
     status: Optional[str] = Query(None),
     limit: int = Query(200, le=500),
     db: Session = Depends(get_db),
+    user: AuthUser = Depends(_require_admin),
 ):
     return get_all_logs(db, merchant_id=merchant_id, status=status, limit=limit)
 
@@ -25,5 +31,6 @@ def list_merchant_audit_logs(
     merchant_id: int,
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_own_merchant),
 ):
     return get_merchant_logs(db, merchant_id, limit=limit)
