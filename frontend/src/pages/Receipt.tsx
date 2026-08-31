@@ -1,49 +1,58 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { fetchOrder } from '../api/client';
-import { Spinner, TrustBadge } from '../components';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchOrder, completeTestPayment } from '../api/client';
+import { Spinner, TrustBadge, MerchantLogo } from '../components';
+import { useUIStore } from '../stores/uiStore';
 import { formatLocalDateTime } from '../utils/date';
 
 export default function Receipt() {
   const { id: routeId, orderId: routeOrderId } = useParams<{ id?: string; orderId?: string }>();
   const orderId = Number(routeId || routeOrderId);
+  const { addToast } = useUIStore();
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['order', orderId],
     queryFn: () => fetchOrder(orderId),
   });
 
+  const payMutation = useMutation({
+    mutationFn: () => completeTestPayment(orderId),
+    onSuccess: (res) => {
+      addToast(`Payment verified! (Razorpay ID: ${res.razorpay_payment_id})`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['myOrders'] });
+    },
+    onError: (err: any) => {
+      addToast(err?.response?.data?.detail || 'Failed to complete payment', 'error');
+    },
+  });
+
   if (isLoading) return <Spinner />;
   if (!data) return <div className="text-center py-16 text-text-secondary">Order not found</div>;
 
-
   const { order, product, merchant, negotiation } = data;
-
   const formattedTime = formatLocalDateTime(order.created_at);
+  const isPaid = order.status === 'paid';
 
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-8 lg:px-12 py-6 sm:py-12 animate-fadeIn">
       <div className="bg-white rounded-3xl border border-border shadow-lg overflow-hidden">
-
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-primary-dark px-4 sm:px-8 py-8 sm:py-10 text-white text-center relative overflow-hidden">
+        <div className={`px-4 sm:px-8 py-8 sm:py-10 text-white text-center relative overflow-hidden ${
+          isPaid ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-primary-dark' : 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700'
+        }`}>
           <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4 backdrop-blur-md shadow-inner">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            {isPaid ? (
+              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <span className="text-2xl">⏳</span>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1.5">
-            Verified AI Commerce Receipt
+            {isPaid ? 'Verified AI Commerce Receipt' : 'Order Awaiting Payment Verification'}
           </h1>
           <p className="text-blue-100 text-xs sm:text-sm font-medium">
             Order #{order.id} · {formattedTime}
@@ -52,31 +61,60 @@ export default function Receipt() {
 
         <div className="p-5 sm:p-8 space-y-5 sm:space-y-6">
           {/* Razorpay Transaction Details Banner */}
-          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 space-y-2">
+          <div className={`p-4 rounded-2xl border space-y-2 ${
+            isPaid ? 'bg-emerald-50/80 border-emerald-200/80' : 'bg-amber-50/80 border-amber-200/80'
+          }`}>
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                <span>🛡️</span>
-                <span>Razorpay Test API Verified Transaction</span>
+              <span className={`text-xs font-bold flex items-center gap-1.5 ${
+                isPaid ? 'text-emerald-900' : 'text-amber-900'
+              }`}>
+                <span>{isPaid ? '🛡️' : '⏳'}</span>
+                <span>{isPaid ? 'Razorpay Test API Verified Transaction' : 'Razorpay Order Created — Awaiting Payment'}</span>
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-600 text-white shadow-2xs">
-                {order.status === 'paid' ? 'Paid & Verified' : order.status}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase shadow-2xs ${
+                isPaid ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-slate-900'
+              }`}>
+                {isPaid ? 'Paid & Verified' : 'Payment Awaiting'}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-emerald-200/60 font-mono">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t font-mono ${
+              isPaid ? 'border-emerald-200/60' : 'border-amber-200/60'
+            }`}>
               <div>
-                <span className="text-emerald-700 font-sans text-[11px] block">Razorpay Order ID:</span>
-                <span className="text-emerald-950 font-bold break-all">
+                <span className={`${isPaid ? 'text-emerald-700' : 'text-amber-700'} font-sans text-[11px] block`}>
+                  Razorpay Order ID:
+                </span>
+                <span className={`${isPaid ? 'text-emerald-950' : 'text-amber-950'} font-bold break-all`}>
                   {order.razorpay_order_id || 'N/A'}
                 </span>
               </div>
               <div>
-                <span className="text-emerald-700 font-sans text-[11px] block">Razorpay Payment ID:</span>
-                <span className="text-emerald-950 font-bold break-all">
-                  {order.razorpay_payment_id || `pay_verified_${order.id}`}
+                <span className={`${isPaid ? 'text-emerald-700' : 'text-amber-700'} font-sans text-[11px] block`}>
+                  Razorpay Payment ID:
+                </span>
+                <span className={`${isPaid ? 'text-emerald-950' : 'text-amber-950'} font-bold break-all`}>
+                  {order.razorpay_payment_id || (isPaid ? `pay_verified_${order.id}` : 'Pending Confirmation')}
                 </span>
               </div>
             </div>
+
+            {!isPaid && (
+              <div className="pt-2">
+                <button
+                  onClick={() => payMutation.mutate()}
+                  disabled={payMutation.isPending}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {payMutation.isPending ? (
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>⚡</span>
+                  )}
+                  <span>Complete Payment Verification Now (₹{Number(order.amount).toLocaleString('en-IN')})</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* User Intent & Upsell Details */}
@@ -132,11 +170,16 @@ export default function Receipt() {
                 Merchant
               </h3>
               <div className="bg-surface-alt rounded-xl p-3.5 sm:p-4">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <p className="font-semibold text-text text-sm sm:text-base">{merchant?.name}</p>
-                  <TrustBadge score={merchant?.trust_score || 0} />
+                <div className="flex items-center gap-3">
+                  <MerchantLogo name={merchant?.name} category={merchant?.category} size="md" />
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="font-semibold text-text text-sm sm:text-base">{merchant?.name}</p>
+                      <TrustBadge score={merchant?.trust_score || 0} />
+                    </div>
+                    <p className="text-xs text-text-secondary">Verified Autonomous Commerce Merchant</p>
+                  </div>
                 </div>
-                <p className="text-xs text-text-secondary">Verified Autonomous Commerce Merchant</p>
               </div>
             </div>
           </div>
@@ -176,7 +219,7 @@ export default function Receipt() {
             </div>
           )}
 
-          {/* Authorization Check */}
+          {/* Autonomous Verification */}
           <div>
             <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
               Autonomous Verification
@@ -217,12 +260,12 @@ export default function Receipt() {
                 <span className="text-text-secondary">Payment State</span>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                    order.status === 'paid'
+                    isPaid
                       ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-blue-100 text-blue-800'
+                      : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {order.status === 'paid' ? 'PAID & VERIFIED' : order.status}
+                  {isPaid ? 'PAID & VERIFIED' : 'PAYMENT AWAITING'}
                 </span>
               </div>
             </div>

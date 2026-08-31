@@ -104,7 +104,7 @@ export default function Login() {
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50/80 border border-blue-200/60 shadow-xs backdrop-blur-md">
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-[10px] font-bold text-primary tracking-wider uppercase">
-                  Firebase OAuth 2.0 & Role Selection
+                  Secure Access & Role Selection
                 </span>
               </div>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -174,20 +174,13 @@ export default function Login() {
 
           {/* Configuration Hint Alert if Google Auth Not Enabled */}
           {configError && (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-left text-xs space-y-2.5 animate-fadeIn">
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-left text-xs space-y-2 animate-fadeIn">
               <div className="font-bold text-amber-900 flex items-center gap-1.5">
-                <span>⚠️</span> Enable Google Provider in Firebase Console
+                <span>⚠️</span> Sign-In Notice
               </div>
-              <div className="pt-1">
-                <a
-                  href="https://console.firebase.google.com/u/0/project/agent-ray/authentication"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-3d-primary inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md cursor-pointer"
-                >
-                  <span>Open Firebase Console ↗</span>
-                </a>
-              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                {configError}
+              </p>
             </div>
           )}
 

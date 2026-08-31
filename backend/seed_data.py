@@ -58,6 +58,9 @@ Forest Essentials Soundarya 24K Gold Radiance Facial Serum,4975,35,Ayurvedic Ski
 Laneige Berry Lip Sleeping Mask with Vitamin C,1450,80,Skincare,2,15-day return,Laneige,20 g"""
 
 BOOKMYSHOW_CATALOG = """name,price,stock,category,delivery_days,return_policy,event_type,seat_tier
+Spider-Man: Brand New Day (IMAX 3D Laser Recliner Experience),750,80,Entertainment & Cinema,1,Cancel up to 2 hours before showtime,Movie,VIP Recliner
+Avatar: Fire and Ash (4DX 3D Motion Pass),850,75,Entertainment & Cinema,1,Cancel up to 2 hours before showtime,Movie,4DX 3D
+Avengers: Secret Wars VIP Laser Premiere Pass,950,50,Entertainment & Cinema,1,Cancel up to 2 hours before showtime,Movie,VIP Laser
 IMAX 3D Laser Cinema Premium Recliner Pass (2 Tickets + F&B),1850,60,Entertainment & Cinema,1,Cancel up to 2 hours before showtime,Movie,VIP Recliner
 ColdPlay Music of the Spheres World Tour VIP Lounge Pass,12500,15,Concerts & Live,1,Non-refundable verified collectible pass,Concert,VIP Lounge
 Arijit Singh Live In Concert Platinum Front Row Pass,8500,25,Concerts & Live,1,100% refund if event rescheduled,Live Music,Platinum Front
@@ -198,23 +201,28 @@ def seed_all(db: Session):
 
     for mdata in merchants_data:
         # Check if merchant already exists
-        existing = db.query(Merchant).filter(Merchant.name == mdata["name"]).first()
-        if existing:
-            continue
-
-        merchant = Merchant(
-            name=mdata["name"],
-            category=mdata["category"],
-            raw_catalog_text=mdata["catalog"],
-            status="active",
-            policy_rules=mdata["policy"],
-        )
-        db.add(merchant)
-        db.flush()
+        merchant = db.query(Merchant).filter(Merchant.name == mdata["name"]).first()
+        if not merchant:
+            merchant = Merchant(
+                name=mdata["name"],
+                category=mdata["category"],
+                raw_catalog_text=mdata["catalog"],
+                status="active",
+                policy_rules=mdata["policy"],
+            )
+            db.add(merchant)
+            db.flush()
+        else:
+            merchant.category = mdata["category"]
+            merchant.raw_catalog_text = mdata["catalog"]
+            merchant.policy_rules = mdata["policy"]
+            merchant.status = "active"
+            # Clear old products for clean refresh
+            db.query(Product).filter(Product.merchant_id == merchant.id).delete()
+            db.flush()
 
         # Normalize catalog using fast rule-based parser
         normalized = _normalize_rule_based(mdata["catalog"])
-
 
         # Create products
         product_ids = []
@@ -252,15 +260,25 @@ def seed_all(db: Session):
         )
         merchant.trust_score = trust_result["overall"]
 
-        # Create manifest
-        manifest = Manifest(
-            merchant_id=merchant.id,
-            raw_product_count=len(normalized),
-            normalized_product_count=len(product_ids),
-            flagged_count=flagged,
-            product_ids=product_ids,
-            completeness_score=trust_result["breakdown"]["completeness"],
-        )
-        db.add(manifest)
+        # Create or update manifest
+        manifest = db.query(Manifest).filter(Manifest.merchant_id == merchant.id).first()
+        if not manifest:
+            manifest = Manifest(
+                merchant_id=merchant.id,
+                raw_product_count=len(normalized),
+                normalized_product_count=len(product_ids),
+                flagged_count=flagged,
+                product_ids=product_ids,
+                completeness_score=trust_result["breakdown"]["completeness"],
+            )
+            db.add(manifest)
+        else:
+            manifest.raw_product_count = len(normalized)
+            manifest.normalized_product_count = len(product_ids)
+            manifest.flagged_count = flagged
+            manifest.product_ids = product_ids
+            manifest.completeness_score = trust_result["breakdown"]["completeness"]
+
+    db.commit()
 
     db.commit()

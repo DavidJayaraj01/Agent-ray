@@ -511,9 +511,9 @@ export default function App() {
             <span>Autonomous Commerce Readiness Platform</span>
           </div>
           <div className="flex items-center gap-4 text-text-tertiary text-[11px]">
-            <span>Powered by Razorpay Test API</span>
+            <span>Deterministic Policy Engine</span>
             <span>&middot;</span>
-            <span>Firebase Auth & RTDB</span>
+            <span>Real-Time Autonomous Settlement</span>
           </div>
         </div>
       </footer>

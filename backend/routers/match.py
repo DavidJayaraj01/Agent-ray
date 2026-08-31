@@ -22,23 +22,44 @@ def match_products(data: MatchRequest, db: Session = Depends(get_db)):
     if data.intent_id:
         intent = db.query(Intent).filter(Intent.id == data.intent_id).first()
         if intent:
-            constraints = intent.parsed_constraints
+            # Merge intent constraints with request constraints (request constraints take priority)
+            merged = dict(intent.parsed_constraints or {})
+            merged.update(constraints)
+            constraints = merged
             raw_query = intent.raw_text or ""
 
     if not raw_query and constraints.get("keywords"):
         raw_query = " ".join(constraints.get("keywords", []))
 
-    # 1. On-demand marketplace discovery: Ensure live products matching query exist in DB
-    if raw_query:
-        _ensure_live_marketplace_products(db, raw_query, constraints.get("budget"))
+    target_merchant_id = constraints.get("merchant_id")
+    target_category = constraints.get("category")
 
-    # 2. Query all active merchant products
-    products = (
+    # 1. On-demand multi-platform live discovery & real-time scraping
+    if raw_query:
+        _ensure_live_marketplace_products(
+            db=db,
+            query=raw_query,
+            merchant_id=int(target_merchant_id) if target_merchant_id else None,
+            category=target_category,
+            budget=constraints.get("budget"),
+        )
+
+    # 2. Query active merchant products with optional merchant_id / category filter
+    query = (
         db.query(Product, Merchant)
         .join(Merchant, Product.merchant_id == Merchant.id)
         .filter(Merchant.status == "active")
-        .all()
     )
+
+    if target_merchant_id:
+        query = query.filter(Product.merchant_id == int(target_merchant_id))
+
+    if target_category and target_category.lower() != "all":
+        query = query.filter(
+            (Merchant.category.ilike(f"%{target_category}%")) | (Product.category.ilike(f"%{target_category}%"))
+        )
+
+    products = query.all()
 
     results = []
     for product, merchant in products:
@@ -66,64 +87,97 @@ def match_products(data: MatchRequest, db: Session = Depends(get_db)):
     return MatchResponse(results=results[:24], total=len(results))
 
 
-def _ensure_live_marketplace_products(db: Session, query: str, budget: float | None):
-    """Find authentic products from Meesho, Amazon, and Flipkart and persist any newly discovered ones."""
-    live_items = search_marketplace_products(query, budget)
+def _ensure_live_marketplace_products(
+    db: Session,
+    query: str,
+    merchant_id: int | None = None,
+    category: str | None = None,
+    budget: float | None = None,
+):
+    """Find authentic products across all 12 platforms in real-time and persist newly discovered ones."""
+    live_items = search_marketplace_products(
+        query=query,
+        merchant_id=merchant_id,
+        category=category,
+        budget=budget,
+    )
     if not live_items:
         return
 
-    # Cache merchants by platform
-    platform_merchants = {}
-    for m in db.query(Merchant).all():
-        for plat in ["Meesho", "Amazon", "Flipkart"]:
-            if plat.lower() in m.name.lower():
-                platform_merchants[plat] = m
+    all_merchants = db.query(Merchant).all()
+    if not all_merchants:
+        return
+
+    merchant_by_id = {m.id: m for m in all_merchants}
+    merchant_by_platform: dict[str, Merchant] = {}
+    for m in all_merchants:
+        m_name_low = m.name.lower()
+        if "bookmyshow" in m_name_low:
+            merchant_by_platform["bookmyshow"] = m
+        elif "zomato" in m_name_low:
+            merchant_by_platform["zomato"] = m
+        elif "swiggy" in m_name_low:
+            merchant_by_platform["swiggy"] = m
+        elif "zepto" in m_name_low:
+            merchant_by_platform["zepto"] = m
+        elif "nykaa" in m_name_low:
+            merchant_by_platform["nykaa"] = m
+        elif "spicejet" in m_name_low:
+            merchant_by_platform["spicejet"] = m
+        elif "meesho" in m_name_low:
+            merchant_by_platform["meesho"] = m
+        elif "amazon" in m_name_low:
+            merchant_by_platform["amazon"] = m
+        elif "flipkart" in m_name_low:
+            merchant_by_platform["flipkart"] = m
+        elif "urban" in m_name_low:
+            merchant_by_platform["urban"] = m
+        elif "coursera" in m_name_low:
+            merchant_by_platform["coursera"] = m
+        elif "meta" in m_name_low or "facebook" in m_name_low:
+            merchant_by_platform["meta"] = m
 
     for item in live_items:
-        plat = item["platform"]
-        merchant = platform_merchants.get(plat)
-        if not merchant:
-            # Create merchant if not exists
-            merchant = Merchant(
-                name=f"{plat} Verified Direct",
-                category=item["category"],
-                raw_catalog_text="",
-                status="active",
-                trust_score=item.get("trust_score", 95.0),
-                policy_rules={"max_discount": 12, "min_price": 200, "max_auto_order": 250000, "negotiation_enabled": True},
-            )
-            db.add(merchant)
-            db.flush()
-            platform_merchants[plat] = merchant
+        plat_low = str(item.get("platform", "")).lower()
+        target_m = None
+        if merchant_id and merchant_id in merchant_by_id:
+            target_m = merchant_by_id[merchant_id]
+        else:
+            for key, m in merchant_by_platform.items():
+                if key in plat_low:
+                    target_m = m
+                    break
+
+        if not target_m:
+            target_m = all_merchants[0]
 
         # Check if product already exists by exact name & merchant
         existing = db.query(Product).filter(
-            Product.merchant_id == merchant.id,
+            Product.merchant_id == target_m.id,
             Product.name == item["name"]
         ).first()
 
         if existing:
-            # Update with fresh live pricing & variants
             existing.price = item["price"]
             if item.get("variants"):
                 existing.variants = item["variants"]
         else:
             new_p = Product(
-                merchant_id=merchant.id,
+                merchant_id=target_m.id,
                 name=item["name"],
                 price=item["price"],
-                stock=item.get("stock", 25),
-                category=item["category"],
-                delivery_days=item.get("delivery_days", 3),
-                return_policy=item.get("return_policy", "7-day return"),
+                stock=item.get("stock", 50),
+                category=item.get("category", "General"),
+                delivery_days=item.get("delivery_days", 1),
+                return_policy=item.get("return_policy", "Standard satisfaction guarantee"),
                 variants=item.get("variants", {}),
-                confidence_flags={"name": 1.0, "price": 1.0, "platform_verified": 1.0},
+                confidence_flags={"source": "live_realtime_fetch", "platform": item.get("platform")},
                 needs_verification=False,
-                raw_text=f"Live authentic feed from {plat}: {item['name']}",
+                raw_text=item["name"],
             )
             db.add(new_p)
             db.flush()
-            # Sync to Firebase
+
             try:
                 sync_product_to_firebase({
                     "id": new_p.id,
@@ -141,6 +195,14 @@ def _ensure_live_marketplace_products(db: Session, query: str, budget: float | N
     db.commit()
 
 
+STOP_WORDS = {
+    "the", "for", "with", "under", "and", "buy", "show", "new", "brand", "day", "days",
+    "best", "top", "all", "get", "pro", "online", "deal", "deals", "off", "order",
+    "want", "need", "please", "item", "items", "good", "quality", "direct", "me", "to",
+    "in", "at", "from", "of", "a", "an", "is", "or", "by", "price", "rate", "cost", "ticket", "tickets"
+}
+
+
 def _compute_match(product, merchant, constraints: dict, raw_query: str = "") -> tuple[float, dict]:
     """Compute high-accuracy match score (0-100) and detailed explanation dict."""
     score = 0
@@ -148,88 +210,80 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
 
     budget = constraints.get("budget")
     category = constraints.get("category")
-    color = constraints.get("color")
-    size = constraints.get("size")
     delivery = constraints.get("delivery_deadline")
-    keywords = [kw.lower() for kw in constraints.get("keywords", [])]
+    raw_keywords = [kw.lower() for kw in constraints.get("keywords", [])]
 
-    # Also extract words from raw_query (including alphanumeric tokens)
+    # Extract words from raw_query
     if raw_query:
-        query_words = [w.lower() for w in re.split(r'\s+', raw_query) if len(w) > 2 and w not in ["the", "for", "with", "under", "and", "buy", "show"]]
+        query_words = [w.lower() for w in re.split(r'\s+', raw_query) if len(w) > 2]
         for qw in query_words:
-            if qw not in keywords:
-                keywords.append(qw)
+            if qw not in raw_keywords:
+                raw_keywords.append(qw)
 
     name_lower = product.name.lower()
     cat_lower = product.category.lower()
+    m_name_lower = merchant.name.lower()
     q_lower = raw_query.lower()
 
+    # Distinguish core distinct keywords from common modifier/stop words
+    core_keywords = [kw for kw in raw_keywords if kw not in STOP_WORDS and len(kw) > 2]
+
     # ─── CROSS-CATEGORY MISMATCH GUARDS ───
+    is_movie_query = any(w in q_lower for w in ["spiderman", "spider-man", "spider man", "movie", "cinema", "theatre", "theater", "imax", "4dx", "coldplay", "arijit", "comic con", "sunburn", "concert", "festival"])
+    if is_movie_query and any(c in cat_lower for c in ["footwear", "shoes", "sneakers", "dresses", "sarees", "clothing", "apparel"]):
+        return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not entertainment/cinema)"}}
+
+    is_food_query = any(w in q_lower for w in ["biryani", "pizza", "burger", "food", "dining", "mango", "ghee", "coffee", "curry", "snack", "juice", "beverage", "meal", "thali"])
+    if is_food_query and any(c in cat_lower for c in ["smartphones", "electronics", "audio", "tablets", "footwear", "shoes", "dresses", "sarees"]):
+        return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not food/dining)"}}
+
     is_phone_query = any(re.search(r'\b' + re.escape(w) + r'\b', q_lower) for w in ["s26", "s25", "s24", "s23", "phone", "smartphone", "galaxy", "iphone", "pixel", "oneplus"])
-    if is_phone_query and cat_lower in ["footwear", "shoes", "dresses", "sarees", "clothing"]:
+    if is_phone_query and any(c in cat_lower for c in ["footwear", "shoes", "dresses", "sarees", "clothing", "food"]):
         return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not a phone/accessory)"}}
 
     is_footwear_query = any(re.search(r'\b' + re.escape(w) + r'\b', q_lower) for w in ["shoe", "shoes", "sneaker", "sneakers", "footwear", "running shoes"])
-    if is_footwear_query and cat_lower in ["smartphones", "electronics", "audio", "tablets", "dresses", "sarees"]:
+    if is_footwear_query and any(c in cat_lower for c in ["smartphones", "electronics", "audio", "tablets", "dresses", "sarees", "food", "entertainment", "cinema"]):
         return 0, {"intent": {"match": False, "detail": "Cross-category mismatch (not footwear)"}}
 
-    # Helper for token matching with word boundaries on short keywords
+    # Helper for token matching with alphanumeric normalization
     def _kw_matches(kw: str, target: str) -> bool:
+        if not kw or not target:
+            return False
+        if kw in target:
+            return True
+        clean_kw = re.sub(r'[^a-z0-9]', '', kw)
+        clean_target = re.sub(r'[^a-z0-9]', '', target)
+        if clean_kw and len(clean_kw) >= 3 and clean_kw in clean_target:
+            return True
         if len(kw) <= 5:
             return bool(re.search(r'\b' + re.escape(kw) + r'\b', target))
-        return kw in target
+        return False
 
     # ─── 1. KEYWORD & INTENT RELEVANCE (Highest Priority: 45 pts) ───
-    if keywords:
-        matched_kw = [kw for kw in keywords if _kw_matches(kw, name_lower) or _kw_matches(kw, cat_lower)]
-        
-        # Strict category & keyword exclusion rules:
-        if "dress" in keywords:
-            if not ("dress" in name_lower or "gown" in name_lower or "dress" in cat_lower):
-                return 0, {"intent": {"match": False, "detail": "Not a dress"}}
+    if core_keywords:
+        matched_core = [kw for kw in core_keywords if _kw_matches(kw, name_lower) or _kw_matches(kw, cat_lower) or _kw_matches(kw, m_name_lower)]
+        if not matched_core:
+            # If no core distinct search term matches this product, eliminate false positive
+            return 0, {"keywords": {"match": False, "detail": f"Missing core search terms: {', '.join(core_keywords[:3])}"}}
 
-        if "saree" in keywords:
-            if not ("saree" in name_lower or "saree" in cat_lower):
-                return 0, {"intent": {"match": False, "detail": "Not a saree"}}
-
-        if any(kw in ["shoe", "shoes", "sneaker", "sneakers", "footwear"] for kw in keywords):
-            if not any(sw in name_lower or sw in cat_lower for sw in ["shoe", "shoes", "sneaker", "sneakers", "footwear"]):
-                return 0, {"intent": {"match": False, "detail": "Not footwear"}}
-
-        if any(kw in ["laptop", "tablet", "phone", "headphone", "audio", "earbuds"] for kw in keywords):
-            if not any(ew in name_lower or ew in cat_lower for ew in ["laptop", "tablet", "phone", "headphone", "audio", "earbuds", "buds", "s26", "s25", "s24", "s23"]):
-                return 0, {"intent": {"match": False, "detail": "Not matching electronic item"}}
-
-        if matched_kw:
-            # Scale score based on proportion of matched keywords
-            match_ratio = len(matched_kw) / max(len(keywords), 1)
-            score += int(30 + 15 * match_ratio)
-            reasons["keywords"] = {"match": True, "detail": f"Matched intent: {', '.join(matched_kw)}"}
+        match_ratio = len(matched_core) / max(len(core_keywords), 1)
+        score += int(30 + 15 * match_ratio)
+        reasons["keywords"] = {"match": True, "detail": f"Matched intent: {', '.join(matched_core)}"}
+    elif raw_keywords:
+        matched_any = [kw for kw in raw_keywords if _kw_matches(kw, name_lower) or _kw_matches(kw, cat_lower)]
+        if matched_any:
+            score += 25
+            reasons["keywords"] = {"match": True, "detail": f"Matched terms: {', '.join(matched_any)}"}
         else:
-            # If no keyword matched, product does not match search
-            return 0, {"keywords": {"match": False, "detail": "No query keywords matched"}}
+            return 0, {"keywords": {"match": False, "detail": "No query terms matched"}}
     else:
         score += 25
         reasons["keywords"] = {"match": True, "detail": "Broad catalog browse"}
 
     # ─── 2. CATEGORY MATCH (25 pts) ───
-    clothing_subcats = ["clothing", "dresses", "ethnic wear", "sarees", "western wear", "apparel", "traditional wear"]
-    footwear_subcats = ["footwear", "shoes", "sneakers", "running shoes", "sports footwear"]
-    electronics_subcats = ["electronics", "audio", "tablets", "peripherals", "laptops", "gadgets", "smartphones", "accessories"]
-
-    is_cat_match = False
-    if category:
+    if category and category.lower() != "all":
         cat_req = category.lower()
-        if cat_req in cat_lower or cat_lower in cat_req:
-            is_cat_match = True
-        elif cat_req in clothing_subcats and cat_lower in clothing_subcats:
-            is_cat_match = True
-        elif cat_req in footwear_subcats and cat_lower in footwear_subcats:
-            is_cat_match = True
-        elif cat_req in electronics_subcats and cat_lower in electronics_subcats:
-            is_cat_match = True
-
-        if is_cat_match:
+        if cat_req in cat_lower or cat_lower in cat_req or cat_req in merchant.category.lower():
             score += 25
             reasons["category"] = {"match": True, "detail": f"Category: {product.category}"}
         else:

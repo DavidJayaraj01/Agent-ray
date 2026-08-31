@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCertificate } from '../api/client';
-import { Spinner } from '../components';
+import { Spinner, MerchantLogo } from '../components';
 import { useState } from 'react';
 
 
@@ -43,7 +43,14 @@ export default function AgentReadyCertificate() {
             backgroundImage: 'radial-gradient(circle at 25% 25%, #6366f1 0%, transparent 50%), radial-gradient(circle at 75% 75%, #8b5cf6 0%, transparent 50%)',
           }} />
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-white/50 font-semibold mb-3">
+            <MerchantLogo
+              name={merchant.name}
+              category={merchant.category}
+              logoUrl={merchant.logo_url}
+              size="lg"
+              className="mx-auto mb-3.5 ring-4 ring-white/20 shadow-xl"
+            />
+            <div className="text-[10px] uppercase tracking-[0.3em] text-white/50 font-semibold mb-2">
               AgentReady Certification
             </div>
             <h1 className="text-2xl sm:text-3xl font-light tracking-tight mb-1">{merchant.name}</h1>

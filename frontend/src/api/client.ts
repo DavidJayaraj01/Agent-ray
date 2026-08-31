@@ -61,6 +61,8 @@ export const uploadCatalog = (merchantId: number, formData: FormData) =>
 
 export const fetchManifest = (merchantId: number) => api.get(`/manifest/${merchantId}`).then(r => r.data);
 export const verifyManifest = (merchantId: number) => api.post(`/manifest/${merchantId}/verify`).then(r => r.data);
+export const fetchProducts = (params?: { category?: string; merchant_id?: number }) =>
+  api.get('/products', { params }).then(r => r.data);
 export const updateProduct = (productId: number, data: any) => api.put(`/products/${productId}`, data).then(r => r.data);
 
 // ─── Trust ─────────────────────────────────────────────────

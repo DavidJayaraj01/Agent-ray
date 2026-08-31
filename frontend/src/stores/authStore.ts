@@ -157,9 +157,9 @@ export const useAuthStore = create<AuthState>((setStore, getStore) => ({
     } catch (err: any) {
       console.error('Google Sign-in failed:', err);
       let errMsg = err?.message || 'Failed to sign in with Google';
-      if (err?.code === 'auth/configuration-not-found') {
+      if (err?.code === 'auth/configuration-not-found' || err?.code === 'auth/operation-not-allowed') {
         errMsg =
-          'Firebase Auth is not enabled yet in your Firebase Console! Please go to Firebase Console → Authentication → Sign-in method → enable Google.';
+          'Google Sign-in is not enabled in settings yet. Please use the instant 1-Click Role Switch below.';
       }
       setStore({ loading: false, error: errMsg });
       throw new Error(errMsg);

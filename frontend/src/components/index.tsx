@@ -1,4 +1,6 @@
 export { default as Fintech3DIllustration } from './Fintech3DIllustration';
+export { default as MerchantLogo, getBrandDetails } from './MerchantLogo';
+import MerchantLogo from './MerchantLogo';
 
 // ─── 3D Trust Badge ───────────────────────────────────────────
 export function TrustBadge({ score }: { score: number }) {
@@ -35,9 +37,13 @@ export function MerchantCard({ merchant, onClick }: { merchant: any; onClick: ()
 
       <div>
         <div className="flex items-start justify-between mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100/80 border border-blue-200/60 shadow-md shadow-blue-500/10 flex items-center justify-center text-primary font-black text-xl group-hover:scale-105 transition-transform duration-300">
-            {merchant.name.charAt(0)}
-          </div>
+          <MerchantLogo
+            name={merchant.name}
+            category={merchant.category}
+            logoUrl={merchant.logo_url}
+            size="md"
+            className="group-hover:scale-105 transition-transform duration-300 ring-2 ring-white/90 shadow-md"
+          />
           <TrustBadge score={merchant.trust_score} />
         </div>
 
@@ -165,7 +171,8 @@ export function ProductCard({
 
         <div className="flex items-center justify-between flex-wrap gap-1 mb-3">
           {merchantName && (
-            <p className="text-xs text-slate-500 flex items-center gap-1">
+            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+              <MerchantLogo name={merchantName} size="xs" showShadow={false} />
               <span>By</span>
               <span className="font-semibold text-slate-700">{merchantName}</span>
             </p>

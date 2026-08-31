@@ -189,11 +189,18 @@ class TestBlockedOfferNeverReachesOrder:
         client = TestClient(app)
 
         with patch("backend.services.razorpay_service.create_order") as mock_rp:
-            # Attempt to create order with excessive discount on Nike shoes (ID 20, price ~8995)
+            from backend.database import SessionLocal
+            from backend.models import Product
+            db = SessionLocal()
+            sample_product = db.query(Product).filter(Product.price > 1000).first()
+            prod_id = sample_product.id if sample_product else 1
+            db.close()
+
+            # Attempt to create order with excessive discount (e.g. amount = 10 on a >1000 item)
             response = client.post("/api/order/create", json={
-                "product_id": 20,
-                "amount": 1000.0,
-                "buyer_intent": "Attempting unauthorized 88% discount",
+                "product_id": prod_id,
+                "amount": 10.0,
+                "buyer_intent": "Attempting unauthorized 99% discount",
             })
 
             # Assert request was blocked by policy with HTTP 403

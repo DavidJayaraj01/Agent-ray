@@ -1,6 +1,7 @@
 """Manifest generation and retrieval endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Optional
 import datetime
 
 from backend.database import get_db
@@ -183,6 +184,46 @@ def get_manifest(merchant_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/products")
+def list_products(
+    category: Optional[str] = None,
+    merchant_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """List normalized products across active merchants, with optional category or merchant filter."""
+    query = (
+        db.query(Product, Merchant)
+        .join(Merchant, Product.merchant_id == Merchant.id)
+        .filter(Merchant.status == "active")
+    )
+    if merchant_id:
+        query = query.filter(Product.merchant_id == merchant_id)
+    if category and category.lower() != "all":
+        query = query.filter(
+            (Merchant.category.ilike(f"%{category}%")) | (Product.category.ilike(f"%{category}%"))
+        )
+    items = query.all()
+    return [
+        {
+            "id": p.id,
+            "merchant_id": p.merchant_id,
+            "merchant_name": m.name,
+            "merchant_category": m.category,
+            "merchant_trust_score": m.trust_score,
+            "name": p.name,
+            "price": p.price,
+            "stock": p.stock,
+            "category": p.category,
+            "delivery_days": p.delivery_days,
+            "return_policy": p.return_policy,
+            "variants": p.variants,
+            "confidence_flags": p.confidence_flags,
+            "needs_verification": p.needs_verification,
+        }
+        for p, m in items
+    ]
+
+
 @router.put("/products/{product_id}")
 def update_product(product_id: int, data: dict, db: Session = Depends(get_db), user: AuthUser = Depends(get_current_user)):
     """Inline edit a product field (used from manifest review page)."""
@@ -212,3 +253,4 @@ def update_product(product_id: int, data: dict, db: Session = Depends(get_db), u
     )
 
     return {"status": "updated", "product_id": product.id}
+

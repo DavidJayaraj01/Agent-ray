@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchDashboard } from '../api/client';
-import { TrustBadge, TrustBreakdownBar, Spinner } from '../components';
+import { TrustBadge, TrustBreakdownBar, Spinner, MerchantLogo } from '../components';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatLocalTime, formatLocalDateTime } from '../utils/date';
 
@@ -31,18 +31,27 @@ export default function MerchantDashboard() {
 
 
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-border">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-              Merchant Operations
-            </span>
-            <span className="text-text-tertiary">·</span>
-            <span className="text-xs text-text-secondary">{merchant.category}</span>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <MerchantLogo
+            name={merchant.name}
+            category={merchant.category}
+            logoUrl={merchant.logo_url}
+            size="lg"
+            className="shadow-lg ring-2 ring-white/80"
+          />
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Merchant Operations
+              </span>
+              <span className="text-text-tertiary">·</span>
+              <span className="text-xs text-text-secondary">{merchant.category}</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-light text-text tracking-tight flex items-center gap-3 flex-wrap">
+              <span>{merchant.name}</span>
+              <TrustBadge score={merchant.trust_score} />
+            </h1>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-light text-text tracking-tight flex items-center gap-3 flex-wrap">
-            <span>{merchant.name}</span>
-            <TrustBadge score={merchant.trust_score} />
-          </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">

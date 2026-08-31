@@ -1,6 +1,12 @@
 """AgentReady — FastAPI application entry point.
 
 SAFETY: Rejects startup if live Razorpay keys are detected.
+
+SCOPE BOUNDARY: The multi-domain scrapers (BookMyShow, Zomato, Swiggy, Amazon,
+Flipkart, etc.) exist solely as stress-test inputs for the Catalog Normalizer,
+Trust Scorer, and Policy Engine. They prove the pipeline generalizes across
+verticals. AgentReady is NOT a replacement for any of these platforms. In
+production, merchants push their own catalogs via /api/merchants/{id}/manifest.
 """
 import os
 from pathlib import Path

@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchGrowthData } from '../api/client';
-import { Spinner } from '../components';
+import { Spinner, MerchantLogo } from '../components';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export default function GrowthDashboard() {
@@ -25,12 +25,15 @@ export default function GrowthDashboard() {
 
 
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-border">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-primary">🚀 AI Growth Agent</span>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <MerchantLogo name={data.merchant_name} size="lg" className="shadow-lg ring-2 ring-white/80" />
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">🚀 AI Growth Agent</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-light text-text tracking-tight">{data.merchant_name}</h1>
+            <p className="text-xs text-text-secondary mt-1">{data.product_count} products analyzed · Proactive revenue optimization</p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-light text-text tracking-tight">{data.merchant_name}</h1>
-          <p className="text-xs text-text-secondary mt-1">{data.product_count} products analyzed · Proactive revenue optimization</p>
         </div>
         <Link
           to={`/merchant/${merchantId}/dashboard`}
