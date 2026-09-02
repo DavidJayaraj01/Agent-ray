@@ -112,4 +112,29 @@ export const fetchCertificate = (merchantId: number) => api.get(`/merchant/${mer
 export const fetchGrowthData = (merchantId: number) => api.get(`/growth/${merchantId}`).then(r => r.data);
 export const updateGrowthRules = (merchantId: number, data: any) => api.put(`/growth/${merchantId}`, data).then(r => r.data);
 
+// ─── Voice Order ──────────────────────────────────────────────
+export const startVoiceOrderSession = () =>
+  api.post('/voice-order/start').then(r => r.data);
+
+export const sendVoiceUtterance = (sessionId: string, audioBlob: Blob, languageCode: string = 'en-IN') => {
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'recording.webm');
+  formData.append('language_code', languageCode);
+  return api.post(`/voice-order/${sessionId}/utterance`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+export const sendVoiceUtteranceText = (sessionId: string, transcript: string, languageCode: string = 'en-IN') => {
+  const formData = new FormData();
+  formData.append('transcript_text', transcript);
+  formData.append('language_code', languageCode);
+  return api.post(`/voice-order/${sessionId}/utterance`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+
+export const getVoiceSessionState = (sessionId: string) =>
+  api.get(`/voice-order/${sessionId}`).then(r => r.data);
+
 export default api;

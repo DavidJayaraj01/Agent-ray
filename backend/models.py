@@ -122,3 +122,4 @@ class AuditLog(Base):
     actor_uid: Mapped[str] = mapped_column(String(128), default="")
     actor_email: Mapped[str] = mapped_column(String(255), default="")
     actor_role: Mapped[str] = mapped_column(String(50), default="")
+    channel: Mapped[str] = mapped_column(String(50), default="")  # "voice", "manual", etc.

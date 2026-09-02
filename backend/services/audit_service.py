@@ -17,15 +17,24 @@ def log_event(
     actor_uid: str = "",
     actor_email: str = "",
     actor_role: str = "",
+    channel: str = "",
 ) -> AuditLog:
     """Write an audit event. This MUST be called before returning any response
-    that involves an LLM decision, policy check, or payment action."""
+    that involves an LLM decision, policy check, or payment action.
+
+    Args:
+        channel: Optional order channel identifier (e.g. "voice", "manual").
+                 Stored inside input_data for filtering without schema migration.
+    """
+    merged_input = dict(input_data or {})
+    if channel:
+        merged_input["channel"] = channel
     entry = AuditLog(
         timestamp=datetime.datetime.now(datetime.timezone.utc),
         merchant_id=merchant_id,
         actor=actor,
         action=action,
-        input_data=input_data or {},
+        input_data=merged_input,
         output_data=output_data or {},
         decision=decision,
         reason=reason,

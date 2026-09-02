@@ -6,6 +6,7 @@ All order actions verify user identity and log actor_uid/actor_role before retur
 """
 import os
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -307,23 +308,34 @@ async def get_my_orders(
     user: AuthUser = Depends(get_current_user),
 ):
     """Retrieve all orders placed by the current authenticated buyer."""
-    orders = (
-        db.query(Order, Product, Merchant)
-        .outerjoin(Product, Order.product_id == Product.id)
-        .outerjoin(Merchant, Order.merchant_id == Merchant.id)
-        .filter(Order.buyer_uid == user.uid)
-        .order_by(Order.created_at.desc())
-        .all()
-    )
-
-    # If no orders tagged with uid, fallback to recent orders for demo
-    if not orders:
+    if user.uid.startswith("demo_"):
+        # Demo persona: show orders belonging to demo sessions or unassigned demo seed orders
         orders = (
             db.query(Order, Product, Merchant)
             .outerjoin(Product, Order.product_id == Product.id)
             .outerjoin(Merchant, Order.merchant_id == Merchant.id)
+            .filter(
+                or_(
+                    Order.buyer_uid == user.uid,
+                    Order.buyer_uid == "",
+                    Order.buyer_uid.like("demo_%"),
+                )
+            )
             .order_by(Order.created_at.desc())
-            .limit(10)
+            .all()
+        )
+    else:
+        # Strict user isolation: ONLY return orders matching this specific user's UID or email
+        conditions = [Order.buyer_uid == user.uid]
+        if user.email:
+            conditions.append(Order.buyer_email == user.email)
+
+        orders = (
+            db.query(Order, Product, Merchant)
+            .outerjoin(Product, Order.product_id == Product.id)
+            .outerjoin(Merchant, Order.merchant_id == Merchant.id)
+            .filter(or_(*conditions))
+            .order_by(Order.created_at.desc())
             .all()
         )
 

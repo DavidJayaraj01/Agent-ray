@@ -9,10 +9,10 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: false,
-      staleTime: 5 * 60 * 1000, // 5 minutes cache
-      refetchOnWindowFocus: false, // Stop firing requests when switching browser tabs
+      staleTime: 60 * 1000, // 1 minute default cache
+      refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: false,
+      refetchOnMount: true,
     },
   },
 });

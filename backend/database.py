@@ -37,6 +37,7 @@ def init_db():
             ("orders", "buyer_email", "VARCHAR(255) DEFAULT ''"),
             ("negotiations", "buyer_uid", "VARCHAR(128) DEFAULT ''"),
             ("negotiations", "buyer_email", "VARCHAR(255) DEFAULT ''"),
+            ("audit_logs", "channel", "VARCHAR(50) DEFAULT ''"),
         ]:
             try:
                 from sqlalchemy import text

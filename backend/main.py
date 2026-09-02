@@ -37,7 +37,7 @@ from backend.routers import (
     match, negotiate, policy, orders,
     audit, dashboard, firebase,
     voice, growth, export, certificate, ws_negotiate,
-    auth_routes, admin,
+    auth_routes, admin, voice_order,
 )
 
 
@@ -98,6 +98,7 @@ app.include_router(certificate.router)
 app.include_router(ws_negotiate.router)
 app.include_router(auth_routes.router)
 app.include_router(admin.router)
+app.include_router(voice_order.router)
 
 
 @app.get("/")

@@ -211,3 +211,61 @@ class DashboardResponse(BaseModel):
     recent_activity: list[AuditLogResponse] = []
     product_count: int = 0
     flagged_count: int = 0
+
+
+# ─── Voice Order ───────────────────────────────────────────────
+class VoiceOrderStartResponse(BaseModel):
+    session_id: str
+    state: str
+
+
+class VoiceUtteranceRequest(BaseModel):
+    """Used when sending text transcript instead of audio."""
+    transcript: str
+    language_code: str = "en-IN"
+
+
+class VoiceCandidateResponse(BaseModel):
+    product_id: int
+    name: str
+    price: float
+    category: str
+    merchant_id: int
+    merchant_name: str
+    merchant_trust_score: float
+    match_score: float
+    match_reasons: dict = {}
+    stock: int = 0
+    delivery_days: int = 1
+
+
+class VoiceOrderResultResponse(BaseModel):
+    order_id: int
+    razorpay_order_id: str
+    amount: float
+    currency: str = "INR"
+    status: str
+    product_name: str = ""
+    merchant_name: str = ""
+
+
+class VoiceUtteranceResponse(BaseModel):
+    state: str
+    spoken_response: str = ""
+    spoken_audio_base64: Optional[str] = None
+    candidates: list[VoiceCandidateResponse] = []
+    requires_confirmation: bool = False
+    order_result: Optional[VoiceOrderResultResponse] = None
+    clarification_needed: bool = False
+    policy_rejection: Optional[str] = None
+    transcript: str = ""
+    parsed_intent: Optional[dict] = None
+
+
+class VoiceSessionResponse(BaseModel):
+    session_id: str
+    state: str
+    candidates: list[VoiceCandidateResponse] = []
+    transcript_history: list[str] = []
+    order_result: Optional[VoiceOrderResultResponse] = None
+
