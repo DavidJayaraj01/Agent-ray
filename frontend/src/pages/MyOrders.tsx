@@ -11,10 +11,13 @@ export default function MyOrders() {
   const { addToast } = useUIStore();
   const queryClient = useQueryClient();
 
-  const { data: orders, isLoading } = useQuery({
-    queryKey: ['myOrders'],
+  const { data: orders, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['myOrders', user?.uid],
     queryFn: fetchMyOrders,
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const payMutation = useMutation({
@@ -47,12 +50,24 @@ export default function MyOrders() {
           </p>
         </div>
 
-        <Link
-          to="/shop"
-          className="btn-3d-primary inline-flex items-center justify-center px-5 py-2 text-white text-xs font-semibold rounded-full shadow-xs transition-all self-start sm:self-auto"
-        >
-          Browse AI Shop +
-        </Link>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-full border border-slate-200 shadow-xs hover:shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            title="Refresh Orders"
+          >
+            <span className={isFetching ? 'animate-spin inline-block' : ''}>🔄</span>
+            <span>{isFetching ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+
+          <Link
+            to="/shop"
+            className="btn-3d-primary inline-flex items-center justify-center px-5 py-2 text-white text-xs font-semibold rounded-full shadow-xs transition-all"
+          >
+            Browse AI Shop +
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (

@@ -1,7 +1,9 @@
-"""Local LLM service using Ollama for intent parsing, negotiation reasoning, and catalog ops.
+"""LLM service supporting NVIDIA NIM Cloud API and local Ollama.
 
-Uses Ollama (local LLM) instead of cloud APIs — runs entirely on your machine.
-Falls back to rule-based logic if Ollama is not running.
+Priority order:
+1. NVIDIA NIM (Cloud GPU LLM via OpenAI-compatible endpoint)
+2. Ollama (Local LLM fallback)
+3. Deterministic rule-based engines
 """
 import json
 import re
@@ -9,31 +11,78 @@ import os
 import httpx
 
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.2-11b-vision-instruct")
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
-def _ollama_generate(prompt: str, timeout: float = 30.0) -> str:
-    """Call Ollama's generate endpoint. Returns the response text."""
+def _nvidia_generate(prompt: str, timeout: float = 30.0) -> str:
+    """Call NVIDIA NIM chat completions endpoint."""
+    resp = httpx.post(
+        f"{NVIDIA_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {NVIDIA_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": NVIDIA_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": 2048,
+        },
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _ollama_generate_local(prompt: str, timeout: float = 30.0) -> str:
+    """Call local Ollama's generate endpoint."""
+    resp = httpx.post(
+        f"{OLLAMA_BASE_URL}/api/generate",
+        json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    return resp.json().get("response", "")
+
+
+def llm_generate(prompt: str, timeout: float = 30.0) -> str:
+    """Generate response using NVIDIA NIM, falling back to Ollama."""
+    if NVIDIA_API_KEY:
+        try:
+            return _nvidia_generate(prompt, timeout=timeout)
+        except Exception as e:
+            print(f"[LLM Service] NVIDIA NIM call failed: {e}. Trying Ollama...")
+
     try:
-        resp = httpx.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp.json().get("response", "")
+        return _ollama_generate_local(prompt, timeout=timeout)
     except Exception:
-        raise ConnectionError("Ollama is not running or model not available")
+        raise ConnectionError("No LLM provider available (NVIDIA NIM or Ollama)")
 
 
-def _ollama_available() -> bool:
-    """Check if Ollama is reachable."""
+def _ollama_available_local() -> bool:
+    """Check if Ollama is reachable locally."""
     try:
         resp = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2.0)
         return resp.status_code == 200
     except Exception:
         return False
+
+
+def llm_available() -> bool:
+    """Check if an LLM is available (NVIDIA NIM or local Ollama)."""
+    return bool(NVIDIA_API_KEY.strip()) or _ollama_available_local()
+
+
+# Backwards compatibility aliases for existing imports
+_ollama_generate = llm_generate
+_ollama_available = llm_available
+
 
 
 def parse_intent(raw_text: str) -> dict:
@@ -242,6 +291,16 @@ def _parse_intent_rule_based(raw_text: str) -> dict:
     elif re.search(r'\b(?:watch|smartwatch)\b', text):
         constraints["category"] = "Accessories"
         constraints["keywords"].append("watch")
+    elif re.search(r'\b(?:biryani|pizza|burger|salad|curry|noodles|momos|dosa|idli|thali|paneer|kebab|tikka|tandoori|pasta|sushi|quinoa|sandwich|wrap|bowl|soup|meal|dinner|lunch|breakfast|snack|food|dining)\b', text):
+        constraints["category"] = "Food & Dining"
+        food_match = re.search(r'\b(biryani|pizza|burger|salad|curry|noodles|momos|dosa|idli|thali|paneer|kebab|tikka|tandoori|pasta|sushi|quinoa|sandwich|wrap|bowl|soup|meal)\b', text)
+        if food_match:
+            constraints["keywords"].append(food_match.group(1))
+    elif re.search(r'\b(?:grocery|groceries|milk|ghee|avocado|mango|juice|coffee|tea|dairy|fresh)\b', text):
+        constraints["category"] = "Groceries & Fresh"
+        grocery_match = re.search(r'\b(grocery|milk|ghee|avocado|mango|juice|coffee|tea)\b', text)
+        if grocery_match:
+            constraints["keywords"].append(grocery_match.group(1))
 
     # Color extraction
     colors = ["black", "white", "red", "blue", "green", "yellow", "pink", "grey", "gray",

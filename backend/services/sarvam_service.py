@@ -133,3 +133,57 @@ def text_to_speech(
     except Exception as e:
         print(f"[Sarvam TTS] Error: {e}")
         return None
+
+
+def generate_confirmation_speech(
+    item_name: str,
+    amount: float,
+    language_code: str = "en-IN",
+    speaker: str = "kavya",
+) -> dict | None:
+    """Generate Zomato-style order confirmation speech.
+
+    Formats: "Your order for {item} has been placed. Debited ₹{amount}."
+    """
+    text = (
+        f"Your order for {item_name} has been placed successfully. "
+        f"Amount debited: {amount:.0f} rupees. "
+        f"Thank you for ordering!"
+    )
+    return text_to_speech(text, language_code, speaker)
+
+
+def generate_candidates_speech(
+    candidates: list[dict],
+    language_code: str = "en-IN",
+    speaker: str = "kavya",
+) -> tuple[str, dict | None]:
+    """Generate spoken summary of matched candidates.
+
+    Returns (response_text, tts_result).
+    """
+    if not candidates:
+        response_text = (
+            "I couldn't find any items matching your request. "
+            "Try broadening your search — for example, increase your budget "
+            "or try a different category."
+        )
+    elif len(candidates) == 1:
+        c = candidates[0]
+        response_text = (
+            f"I found one match: {c['name']} at {c['price']:.0f} rupees "
+            f"from {c['merchant_name']}. "
+            f"Would you like me to order it?"
+        )
+    else:
+        top = candidates[0]
+        response_text = (
+            f"I found {len(candidates)} items matching your request. "
+            f"The best match is {top['name']} at {top['price']:.0f} rupees "
+            f"from {top['merchant_name']}. "
+            f"Which one would you like to order?"
+        )
+
+    tts_result = text_to_speech(response_text, language_code, speaker)
+    return response_text, tts_result
+
