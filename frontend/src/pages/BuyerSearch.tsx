@@ -95,7 +95,7 @@ export default function BuyerSearch() {
       const constraints = {
         ...(intent.parsed_constraints || {}),
         merchant_id: merchantId || undefined,
-        category: selectedCategory === 'All' ? undefined : selectedCategory,
+        category: selectedCategory === 'All' ? 'All' : selectedCategory,
       };
       const matches = await matchProducts(constraints, intent.id);
       return matches;

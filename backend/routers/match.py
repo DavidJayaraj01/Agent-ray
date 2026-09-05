@@ -55,9 +55,20 @@ def match_products(data: MatchRequest, db: Session = Depends(get_db)):
         query = query.filter(Product.merchant_id == int(target_merchant_id))
 
     if target_category and target_category.lower() != "all":
-        query = query.filter(
-            (Merchant.category.ilike(f"%{target_category}%")) | (Product.category.ilike(f"%{target_category}%"))
+        cat_filter = (
+            (Merchant.category.ilike(f"%{target_category}%"))
+            | (Product.category.ilike(f"%{target_category}%"))
+            | (Product.name.ilike(f"%{target_category}%"))
         )
+        if raw_query:
+            cat_filter = cat_filter | (Product.name.ilike(f"%{raw_query}%"))
+            for word in raw_query.split():
+                if len(word) > 2:
+                    cat_filter = cat_filter | (Product.name.ilike(f"%{word}%"))
+        for kw in constraints.get("keywords", []):
+            if len(kw) > 2:
+                cat_filter = cat_filter | (Product.name.ilike(f"%{kw}%"))
+        query = query.filter(cat_filter)
 
     products = query.all()
 
@@ -283,7 +294,7 @@ def _compute_match(product, merchant, constraints: dict, raw_query: str = "") ->
     # ─── 2. CATEGORY MATCH (25 pts) ───
     if category and category.lower() != "all":
         cat_req = category.lower()
-        if cat_req in cat_lower or cat_lower in cat_req or cat_req in merchant.category.lower():
+        if cat_req in cat_lower or cat_lower in cat_req or cat_req in merchant.category.lower() or cat_req in name_lower:
             score += 25
             reasons["category"] = {"match": True, "detail": f"Category: {product.category}"}
         else:

@@ -165,12 +165,12 @@ Buyer says: "{raw_text}"
 
 Return ONLY a valid JSON object with these fields (use null if not mentioned):
 - budget: number (max price in INR)
-- category: string (product category)
+- category: string (broad vertical: "Smartphones", "Audio", "Laptops", "Food & Dining", "Entertainment & Cinema", "Sports & Footwear", "Fashion & Apparel", "Beauty & Wellness", "Travel & Flights", "Home Services", "Groceries & Fresh", "E-commerce & Retail", or null if not an explicit broad vertical)
 - size: string (S/M/L/XL or shoe size etc.)
 - color: string
 - brand: string
 - delivery_deadline: number (max delivery days)
-- keywords: array of strings (key search terms)
+- keywords: array of strings (specific product nouns or query terms, e.g. ["clock"], ["iphone"], ["shoes"])
 - quantity: number (default 1)
 
 Return ONLY the JSON, no explanation."""
